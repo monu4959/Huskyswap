@@ -1,5 +1,7 @@
 # HuskySwap
 
+**Live demo: https://huskyswap.vercel.app** (sign in with any `@northeastern.edu` email and any 6-digit code; all data is synthetic)
+
 A marketplace for Northeastern students: buy, sell, and borrow things for a week. Sign-in needs an `@northeastern.edu` email. Payment happens in person at a campus meetup spot.
 
 The app runs on **Supabase** (Postgres, Auth, Storage, Realtime). The database holds ~1,000 synthetic students and their listings, deals and chats, which makes it a ready dataset for a text-to-SQL project.

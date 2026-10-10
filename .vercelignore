@@ -1,0 +1,6 @@
+# Never upload local secrets or build output
+.env*
+node_modules
+.next
+# Unreviewed Wikimedia Commons photos (unused by the app)
+public/items/*-c[0-9]*.webp

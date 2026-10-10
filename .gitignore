@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Stand-in photos fetched from Wikimedia Commons but not hand-reviewed yet (unused by the app)
 public/items/*-c[0-9]*.webp
+
+.vercel
+.env*
