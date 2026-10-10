@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+/* Design: app-design.html. Dark navy is the main theme; light is the alternate.
+   The cyan→indigo gradient marks every primary action. */
+
+:root,
+:root[data-theme="dark"] {
+  --bg: #242c3b;
+  --surface: #323b4f;
+  --field: #2a3244;
+  --fg: #ffffff;
+  --muted: #a9b0c2;
+  --line: rgba(255, 255, 255, 0.08);
+  --raise: -5px -5px 12px rgba(255, 255, 255, 0.035), 7px 9px 18px rgba(8, 11, 19, 0.5);
+  --inset: inset 3px 3px 7px rgba(8, 11, 19, 0.5), inset -3px -3px 7px rgba(255, 255, 255, 0.035);
+  --bar-shadow: 0 -10px 26px rgba(8, 11, 19, 0.22);
+  --amber: #f7b955;
+  --cyan: #34c8e8;
+  --violet: #a3a0ff;
+  --green: #5ad7a0;
+  --coral: #ff7a7a;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #eef2f8;
+  --surface: #ffffff;
+  --field: #e2e7f0;
+  --fg: #1b2233;
+  --muted: #5e677a;
+  --line: rgba(27, 34, 51, 0.08);
+  --raise: -5px -5px 12px rgba(255, 255, 255, 0.95), 7px 9px 18px rgba(104, 120, 156, 0.22);
+  --inset: inset 3px 3px 7px rgba(104, 120, 156, 0.25), inset -3px -3px 7px rgba(255, 255, 255, 0.9);
+  --bar-shadow: 0 -10px 26px rgba(104, 120, 156, 0.18);
+  --amber: #a5650c;
+  --cyan: #0a7c9a;
+  --violet: #5550e0;
+  --green: #157f55;
+  --coral: #c33b3b;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --bg: #eef2f8;
+    --surface: #ffffff;
+    --field: #e2e7f0;
+    --fg: #1b2233;
+    --muted: #5e677a;
+    --line: rgba(27, 34, 51, 0.08);
+    --raise: -5px -5px 12px rgba(255, 255, 255, 0.95), 7px 9px 18px rgba(104, 120, 156, 0.22);
+    --inset: inset 3px 3px 7px rgba(104, 120, 156, 0.25), inset -3px -3px 7px rgba(255, 255, 255, 0.9);
+    --bar-shadow: 0 -10px 26px rgba(104, 120, 156, 0.18);
+    --amber: #a5650c;
+    --cyan: #0a7c9a;
+    --violet: #5550e0;
+    --green: #157f55;
+    --coral: #c33b3b;
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-field: var(--field);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-amber: var(--amber);
+  --color-cyan: var(--cyan);
+  --color-violet: var(--violet);
+  --color-green: var(--green);
+  --color-coral: var(--coral);
+  --color-indigo: #4e4af2;
+  --font-sans: var(--font-figtree), "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --font-display: var(--font-sora), "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+
+/* the action gradient and soft surfaces */
+@utility bg-grad {
+  background-image: linear-gradient(135deg, #34c8e8 0%, #4e4af2 100%);
+  color: #fff;
+}
+@utility shadow-raise {
+  box-shadow: var(--raise);
+}
+@utility shadow-inset {
+  box-shadow: var(--inset);
+}
+@utility shadow-grad {
+  box-shadow: 0 12px 22px -12px rgba(78, 74, 242, 0.8);
+}
+@utility shadow-bar {
+  box-shadow: var(--bar-shadow);
+}
+/* the diagonal gradient band behind heroes (the one bold element) */
+@utility plane {
+  background-image: linear-gradient(135deg, #34c8e8 0%, #4e4af2 100%);
+  clip-path: polygon(0 18%, 100% 0, 100% 82%, 0 100%);
+}
+/* gradient outline for a selected option */
+@utility border-grad {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    linear-gradient(135deg, #34c8e8, #4e4af2) border-box;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+/* gradient line illustrations used in place of item photos */
+.ill .body {
+  fill: url(#hs-grad);
+}
+.ill .soft {
+  fill: url(#hs-grad);
+  opacity: 0.55;
+}
+.ill .stroke {
+  fill: none;
+  stroke: url(#hs-grad);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ill .detail {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.ill .inner {
+  fill: var(--bg);
+}
+.ill .dot {
+  fill: rgba(255, 255, 255, 0.9);
+}
+.on-grad .body {
+  fill: #fff;
+}
+.on-grad .soft {
+  fill: #fff;
+  opacity: 0.7;
+}
+.on-grad .stroke {
+  stroke: #fff;
+}
+.on-grad .detail {
+  stroke: #4e4af2;
+}
+.on-grad .inner {
+  fill: #dce6ff;
+}
+.on-grad .dot {
+  fill: #4e4af2;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
