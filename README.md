@@ -15,9 +15,9 @@ npm run dev        # http://localhost:3000
 
 Needs `.env.local` (git-ignored) with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `DATABASE_URL` for the scripts. On a phone, open `http://<your-computer's-IP>:3000` on the same Wi-Fi and use **Add to Home Screen**.
 
-### Development sign-in (current)
+### Demo sign-in (current)
 
-Email codes aren't set up yet. With `DEV_LOGIN=true` and `NEXT_PUBLIC_DEV_LOGIN=true` in `.env.local`, `npm run dev` lets you sign in with just a Northeastern email, through `src/app/api/dev-login/route.ts`. It works for your own account and for any seeded student, which is handy for playing the seller in a deal. The route only runs in development and answers 404 in production builds. Remove both lines once email codes work.
+Email codes aren't set up yet. With `DEMO_LOGIN=true` and `NEXT_PUBLIC_DEMO_LOGIN=true`, any `@northeastern.edu` email gets in and the code screen accepts any 6 digits; no email is sent (`src/app/api/demo-login/route.ts`). It works for new accounts and for any seeded student, which is handy for playing the seller in a deal. It doesn't prove anyone owns their email, so turn it off before real students use the app: remove both settings and set up the email codes below.
 
 ### Sign-in emails (one-time setup in the Supabase dashboard)
 

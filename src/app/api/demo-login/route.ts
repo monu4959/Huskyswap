@@ -1,13 +1,13 @@
-// DEVELOPMENT ONLY: sign in with just a Northeastern email, no code.
-// Stand-in until sign-in emails are set up (Supabase email template + Resend).
+// DEMO SIGN-IN: any @northeastern.edu email gets in; the app's code screen
+// accepts any 6 digits. Stand-in until real email codes are set up (Supabase
+// email template + Resend). Turn it on with DEMO_LOGIN=true (and
+// NEXT_PUBLIC_DEMO_LOGIN=true for the screens); without it this route is a 404.
 //
-// Enabled only when NODE_ENV is "development" (npm run dev) AND DEV_LOGIN=true
-// in .env.local. It finds or creates the account directly in the database,
-// gives it a fresh random password, signs in with that password, and returns the
-// session to the browser. Production builds always answer 404.
-//
-// Handy for testing: you can also sign in as any seeded student (e.g. a seller)
-// to answer your own requests.
+// It finds or creates the account directly in the database, gives it a fresh
+// random password, signs in with that password, and returns the session. Because
+// it never proves the person owns the email, anyone can sign in as any
+// Northeastern address while it's on. Fine for a demo with synthetic data;
+// turn it off before real students use the app.
 
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -16,7 +16,7 @@ import pg from "pg";
 const NU_EMAIL = /^[^@\s]+@northeastern\.edu$/;
 
 function enabled() {
-  return process.env.NODE_ENV === "development" && process.env.DEV_LOGIN === "true";
+  return process.env.DEMO_LOGIN === "true";
 }
 
 export async function POST(request: Request) {

@@ -10,13 +10,13 @@ import { ActionError, useStore } from "@/lib/store";
 
 type Step = "email" | "code" | "name";
 const RESEND_AFTER = 60; // seconds
-// Email codes aren't set up yet: in development, sign in with just the email (/api/dev-login)
-const DEV_LOGIN = process.env.NEXT_PUBLIC_DEV_LOGIN === "true";
+// Email codes aren't set up yet: in demo mode no email is sent and any 6-digit code works (/api/demo-login)
+const DEMO_LOGIN = process.env.NEXT_PUBLIC_DEMO_LOGIN === "true";
 
 // Supabase Auth sends a one-time code to the Northeastern address; the
 // enforce_nu_email trigger rejects any other domain on the server too.
 export default function LoginPage() {
-  const { ready, me, sendCode, verifyCode, devSignIn, updateName } = useStore();
+  const { ready, me, sendCode, verifyCode, demoSignIn, updateName } = useStore();
   const router = useRouter();
   const toast = useToast();
   const [step, setStep] = useState<Step>("email");
@@ -67,12 +67,7 @@ export default function LoginPage() {
     }
     run(async () => {
       setEmail(clean);
-      if (DEV_LOGIN) {
-        const { isNew } = await devSignIn(clean);
-        afterSignIn(isNew, clean);
-        return;
-      }
-      await sendCode(clean);
+      if (!DEMO_LOGIN) await sendCode(clean);
       setCode("");
       setCooldown(RESEND_AFTER);
       setStep("code");
@@ -91,12 +86,12 @@ export default function LoginPage() {
 
   const submitCode = (e: FormEvent) => {
     e.preventDefault();
-    if (!/^\d{6,10}$/.test(code)) {
-      setError("Enter the code from the email.");
+    if (!(DEMO_LOGIN ? /^\d{6}$/ : /^\d{6,10}$/).test(code)) {
+      setError(DEMO_LOGIN ? "Enter any 6 digits." : "Enter the code from the email.");
       return;
     }
     run(async () => {
-      const { isNew } = await verifyCode(email, code);
+      const { isNew } = DEMO_LOGIN ? await demoSignIn(email) : await verifyCode(email, code);
       afterSignIn(isNew, email);
     });
   };
@@ -115,6 +110,10 @@ export default function LoginPage() {
 
   const resend = () =>
     run(async () => {
+      if (DEMO_LOGIN) {
+        toast("Demo mode: no email is sent. Enter any 6 digits.");
+        return;
+      }
       await sendCode(email);
       setCooldown(RESEND_AFTER);
       toast("New code sent");
@@ -147,8 +146,7 @@ export default function LoginPage() {
           <>
             <h1 className="text-[23px] leading-tight font-bold">Buy, sell and borrow on campus</h1>
             <p className="mt-2 mb-5 text-[13.5px] text-muted">
-              Only for Northeastern students. Sign in with your school email
-              {DEV_LOGIN ? "." : " and we'll send you a code."}
+              Only for Northeastern students. Sign in with your school email and we&apos;ll send you a code.
             </p>
 
             {step === "email" ? (
@@ -167,11 +165,8 @@ export default function LoginPage() {
                   />
                 </Field>
                 <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? (DEV_LOGIN ? "Signing in…" : "Sending…") : DEV_LOGIN ? "Continue" : "Send code"}
+                  {busy ? "Sending…" : "Send code"}
                 </Button>
-                {DEV_LOGIN && (
-                  <p className="text-center text-[12px] text-muted">Development mode: no email code yet, you&apos;re signed in directly.</p>
-                )}
               </form>
             ) : (
               <form onSubmit={submitCode} noValidate>
@@ -188,10 +183,16 @@ export default function LoginPage() {
                   <span className="truncate">{email}</span>
                   <span className="text-[12.5px] font-semibold text-cyan">Change</span>
                 </button>
-                <p className="mt-2.5 mb-3 flex items-center gap-1.5 text-[12.5px] text-green">
-                  <Check className="size-4" aria-hidden />
-                  Code sent. Check your inbox (and spam).
-                </p>
+                {DEMO_LOGIN ? (
+                  <p className="mt-2.5 mb-3 rounded-xl bg-cyan/15 px-3 py-2 text-[12.5px] text-cyan">
+                    Demo mode: no email is sent. Enter any 6 digits to sign in.
+                  </p>
+                ) : (
+                  <p className="mt-2.5 mb-3 flex items-center gap-1.5 text-[12.5px] text-green">
+                    <Check className="size-4" aria-hidden />
+                    Code sent. Check your inbox (and spam).
+                  </p>
+                )}
                 {/* one real input, drawn as boxes */}
                 <label className="group relative mb-2 block">
                   <span className="sr-only">Code from the email</span>

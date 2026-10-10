@@ -351,15 +351,15 @@ function useStoreValue() {
     return { isNew: await isNewAccount(data.user!.id, email) };
   }, []);
 
-  // DEVELOPMENT ONLY: email-only sign-in through /api/dev-login (no code is sent)
-  const devSignIn = useCallback(async (email: string) => {
-    const res = await fetch("/api/dev-login", {
+  // DEMO ONLY: sign in through /api/demo-login (no email is sent, any code works)
+  const demoSignIn = useCallback(async (email: string) => {
+    const res = await fetch("/api/demo-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ActionError(body.error ?? "Dev sign-in is turned off. Set DEV_LOGIN=true in .env.local and use npm run dev.");
+    if (!res.ok) throw new ActionError(body.error ?? "Demo sign-in is turned off (DEMO_LOGIN=true).");
     const { data, error } = await supabase.auth.setSession({ access_token: body.access_token, refresh_token: body.refresh_token });
     if (error || !data.user) throw new ActionError(error?.message ?? "Sign-in failed.");
     return { isNew: await isNewAccount(data.user.id, email) };
@@ -577,7 +577,7 @@ function useStoreValue() {
     ...selectors,
     sendCode,
     verifyCode,
-    devSignIn,
+    demoSignIn,
     signOut,
     updateName,
     createListing,
