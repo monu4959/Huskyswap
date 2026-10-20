@@ -1,16 +1,19 @@
-// Ask the text-to-SQL agent a question from the terminal and watch every step.
+// Ask the text-to-SQL agent a question from the terminal and watch the graph run.
 //
 //   npm run ask -- "how many bikes were listed during finals last spring?"
 //   npm run ask -- --role=student "any mini fridges for rent at curry?"
-//   npm run ask -- --no-log "..."        don't write the run to ops.agent_runs
+//   npm run ask -- --role=student --as-user=<student uuid> "how much have I earned?"
+//   npm run ask -- --no-cache --no-log "..."
 //
-// Uses the teacher model from .env.local (TEACHER_*). Runs are logged with
-// source 'cli'.
+// If the agent asks a clarifying question, answer it here (a number picks an
+// option). Uses the teacher model from .env.local (TEACHER_*); runs are
+// logged with source 'cli'.
 
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { closePool } from "../src/lib/agent/db.ts";
-import { closeLogPool } from "../src/lib/agent/log.ts";
-import { runAgent } from "../src/lib/agent/run.ts";
+import { runAgent } from "../src/lib/agent/graph.ts";
+import { closeOpsPool } from "../src/lib/agent/ops-db.ts";
 
 process.loadEnvFile(fileURLToPath(new URL("../.env.local", import.meta.url)));
 
@@ -19,55 +22,71 @@ const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.split("=").
 const question = args.filter((a) => !a.startsWith("--")).join(" ").trim();
 const role = (flag("role") ?? "admin") === "student" ? "nlq_student" : "nlq_admin";
 if (!question) {
-  console.error('Usage: npm run ask -- [--role=student|admin] [--no-log] "question"');
+  console.error('Usage: npm run ask -- [--role=student|admin] [--as-user=<uuid>] [--no-cache] [--no-log] "question"');
   process.exit(1);
 }
 
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-const short = (s, n = 160) => (s.length > n ? `${s.slice(0, n)}…` : s);
+const short = (s, n = 150) => (s && s.length > n ? `${s.slice(0, n)}…` : s);
 
-function summarize(name, content) {
-  const r = JSON.parse(content);
-  if (r.error) return `error: ${r.error}`;
-  if (name === "describe_view") return `${r.columns.length} columns: ${r.columns.map((c) => c.name).join(", ")}`;
-  if (name === "submit_answer") return "submitted";
-  return `${r.row_count} row(s)${r.rows?.length ? `, first: ${JSON.stringify(r.rows[0])}` : ""}`;
+// Clarification answers: typed at a prompt, or read up front when piped in (printf '1\n' | npm run ask ...)
+let piped = null;
+if (!process.stdin.isTTY) {
+  let text = "";
+  for await (const chunk of process.stdin) text += chunk;
+  piped = text.split(/\r?\n/).filter(Boolean);
+}
+async function prompt() {
+  if (piped) return piped.shift() ?? "";
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const line = await rl.question("> ");
+  rl.close();
+  return line;
 }
 
-console.log(dim(`role ${role} · model ${process.env.TEACHER_MODEL}`));
+console.log(dim(`role ${role} · model ${process.env.TEACHER_MODEL}${flag("as-user") ? ` · as student ${flag("as-user")}` : ""}`));
 console.log(`Q: ${question}\n`);
 
-const run = await runAgent({
-  question,
-  role,
-  source: "cli",
-  log: !args.includes("--no-log"),
-  onStep(e) {
-    if (e.type === "tool_call") {
-      const a = JSON.parse(e.args || "{}");
-      if (e.name === "run_sql" || e.name === "submit_answer") {
-        console.log(`  [${e.step}] ${e.name}${a.sql ? `:\n${dim(a.sql.replace(/^/gm, "        "))}` : " (no SQL)"}`);
-      } else {
-        console.log(`  [${e.step}] ${e.name}(${Object.entries(a).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ")})`);
-      }
-    } else if (e.type === "tool_result") {
-      console.log(dim(`      -> ${short(summarize(e.name, e.content))}`));
-    }
-  },
-});
+const clarifications = [];
+let run;
+for (;;) {
+  run = await runAgent({
+    question,
+    clarifications,
+    role,
+    userId: flag("as-user") ?? null,
+    source: "cli",
+    log: !args.includes("--no-log"),
+    useCache: !args.includes("--no-cache"),
+    onEvent(e) {
+      if (e.status === "start") return;
+      const mark = e.status === "error" ? "✗" : e.status === "hit" ? "⚡" : "✓";
+      console.log(`  ${mark} ${e.node.padEnd(8)} ${dim(short(e.detail ?? e.status))}`);
+    },
+  });
+  if (run.status !== "clarify") break;
+  console.log(`\n? ${run.clarification.question}`);
+  run.clarification.options.forEach((o, i) => console.log(`  ${i + 1}. ${o}`));
+  const reply = (await prompt()).trim();
+  if (!reply) break; // no answer given (e.g. nothing piped in): stop at the question
+  const answer = run.clarification.options[Number(reply) - 1] ?? reply;
+  console.log(`> ${answer}\n`);
+  clarifications.push({ question: run.clarification.question, answer });
+}
 
-console.log(`\nStatus: ${run.status}`);
+console.log(`\nStatus: ${run.status}${run.cacheHit ? " (from cache)" : ""}${run.grounded === false ? " (answer not grounded in the result)" : ""}`);
+if (run.resolvedQuestion && run.resolvedQuestion !== question) console.log(`Resolved question: ${run.resolvedQuestion}`);
 console.log(`Answer: ${run.answer ?? "(none)"}`);
-if (run.finalSql) console.log(`\nFinal SQL:\n${run.finalSql}`);
-if (run.result?.ok && run.result.rows.length) console.table(run.result.rows.slice(0, 10));
+if (run.finalSql) console.log(`\nSQL:\n${run.finalSql}`);
+if (run.status === "answered" && run.result?.ok && run.result.rows.length) console.table(run.result.rows.slice(0, 10));
 if (run.error) console.log(`Error: ${run.error}`);
 console.log(
   dim(
-    `\n${run.steps} step(s) · ${run.sqlErrors} SQL error(s) · ${run.promptTokens}+${run.completionTokens} tokens · ` +
-      `${(run.latencyMs / 1000).toFixed(1)} s (steps: ${run.stepLatencyMs.map((ms) => (ms / 1000).toFixed(1)).join(", ")} s)` +
-      (run.runId ? ` · run ${run.runId}` : ""),
+    `\n${run.nodes.map((n) => `${n.node} ${n.ms}ms`).join(" → ")}\n` +
+      `${run.calls.length} model call(s) · ${run.sqlErrors} failed SQL · ${run.promptTokens}+${run.completionTokens} tokens · ` +
+      `${(run.latencyMs / 1000).toFixed(1)} s${run.runId ? ` · run ${run.runId}` : ""}`,
   ),
 );
 
 await closePool();
-await closeLogPool();
+await closeOpsPool();

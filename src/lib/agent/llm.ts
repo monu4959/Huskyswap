@@ -46,13 +46,18 @@ function retryDelayMs(response: Response | null, attempt: number) {
   return Math.min(2 ** attempt * 1000, 30_000);
 }
 
-// requireTool: the model must call one of the tools (used on the last step, with only submit_answer offered)
-export async function chat(cfg: ModelConfig, messages: ChatMessage[], tools: readonly unknown[], requireTool = false): Promise<ChatResult> {
+// tools: offered tools (none for plain replies). requireTool: the model must call one.
+// json: the reply must be a JSON object (nodes that return a decision, not a tool call).
+export async function chat(
+  cfg: ModelConfig,
+  messages: ChatMessage[],
+  { tools = [], requireTool = false, json = false }: { tools?: readonly unknown[]; requireTool?: boolean; json?: boolean } = {},
+): Promise<ChatResult> {
   const body = JSON.stringify({
     model: cfg.model,
     messages,
-    tools,
-    tool_choice: requireTool ? "required" : "auto",
+    ...(tools.length ? { tools, tool_choice: requireTool ? "required" : "auto" } : {}),
+    ...(json ? { response_format: { type: "json_object" } } : {}),
     max_tokens: cfg.maxTokens ?? 4096,
     ...(cfg.temperature !== undefined ? { temperature: cfg.temperature } : {}),
     ...(cfg.reasoningEffort ? { reasoning_effort: cfg.reasoningEffort } : {}),

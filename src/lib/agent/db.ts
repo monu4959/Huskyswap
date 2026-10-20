@@ -7,6 +7,7 @@
 
 import pg from "pg";
 import { checkSql } from "./guard.ts";
+import { scrubRow } from "./privacy.ts";
 import type { DbRole, SqlResult } from "./types.ts";
 
 const ROLES = new Set<DbRole>(["nlq_student", "nlq_admin"]);
@@ -46,7 +47,14 @@ export async function closePool() {
   pool = null;
 }
 
-export async function runSelect(sql: string, role: DbRole, params: unknown[] = []): Promise<SqlResult> {
+// userId: the signed-in student, from the verified session (never from the model).
+// The my_* views show only that student's rows; without it they are empty.
+export async function runSelect(
+  sql: string,
+  role: DbRole,
+  params: unknown[] = [],
+  { userId = null }: { userId?: string | null } = {},
+): Promise<SqlResult> {
   if (!ROLES.has(role)) return { ok: false, error: `Unknown role ${role}` };
   const checked = await checkSql(sql, role);
   if (!checked.ok) return checked;
@@ -62,8 +70,9 @@ export async function runSelect(sql: string, role: DbRole, params: unknown[] = [
     await client.query("begin read only");
     await client.query(`set local role ${role}`);
     await client.query(`set local statement_timeout = ${TIMEOUT_MS[role]}`);
-    // A query must run before the model's SQL: after it, SET TRANSACTION READ WRITE is refused
-    await client.query("select 1");
+    // Who is asking, for the my_* views. Being a query, this also locks the
+    // transaction read-only: after it, SET TRANSACTION READ WRITE is refused.
+    await client.query("select set_config('app.user_id', $1, true)", [userId ?? ""]);
     // Extended protocol rejects multiple statements; the newline keeps a trailing -- comment from eating the wrapper
     // (queryMode is supported by pg 8.23 but missing from @types/pg)
     const result = await client.query<Record<string, unknown>>({
@@ -72,7 +81,7 @@ export async function runSelect(sql: string, role: DbRole, params: unknown[] = [
       queryMode: "extended",
     } as pg.QueryConfig);
     const truncated = result.rows.length > MAX_ROWS;
-    const rows = truncated ? result.rows.slice(0, MAX_ROWS) : result.rows;
+    const rows = (truncated ? result.rows.slice(0, MAX_ROWS) : result.rows).map(scrubRow);
     return { ok: true, columns: result.fields.map((f) => f.name), rows, rowCount: rows.length, truncated };
   } catch (e) {
     const err = e as Error & { hint?: string };

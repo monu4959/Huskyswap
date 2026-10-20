@@ -89,8 +89,19 @@ export async function checkSql(input: string, role: DbRole): Promise<GuardResult
 
   const allowedViews = viewsFor(role);
   const cteNames = new Set<string>();
+  // alias (or bare view name) -> the nlq views it can stand for, to check qualified columns
+  const aliases = new Map<string, Set<string>>();
   walk(stmts, (key, value) => {
     if (key === "CommonTableExpr") cteNames.add(value.ctename as string);
+  });
+  walk(stmts, (key, value) => {
+    if (key !== "RangeVar") return;
+    const name = value.relname as string;
+    const schema = value.schemaname as string | undefined;
+    if ((schema && schema !== "nlq") || (!schema && cteNames.has(name)) || !allowedViews.has(name)) return;
+    const alias = (value.alias as { aliasname?: string } | undefined)?.aliasname ?? name;
+    if (!aliases.has(alias)) aliases.set(alias, new Set());
+    aliases.get(alias)!.add(name);
   });
 
   const problems: string[] = [];
@@ -117,6 +128,19 @@ export async function checkSql(input: string, role: DbRole): Promise<GuardResult
         problems.push(`Function ${schema}.${name}() is not allowed.`);
       } else if (!ALLOWED_FUNCTIONS.has(name)) {
         problems.push(`Function ${name}() is not allowed.`);
+      }
+    } else if (key === "ColumnRef") {
+      // alias.column (or nlq.view.column) on a known view: the column must exist.
+      // Unqualified columns are left to Postgres, which reports them precisely.
+      const fields = (value.fields as Node[]).map((f) => (f.String as { sval: string } | undefined)?.sval);
+      if (fields.length < 2 || fields.some((f) => f === undefined)) return;
+      const [qualifier, column] = fields.slice(-2) as [string, string];
+      const views = aliases.get(qualifier);
+      if (!views) return;
+      const known = [...views].map((v) => SCHEMA_CARD.find((c) => c.name === v)!);
+      if (!known.some((v) => v.columns.some((c) => c.name === column))) {
+        const v = known[0];
+        problems.push(`Column ${qualifier}.${column} does not exist in ${v.name}. Its columns: ${v.columns.map((c) => c.name).join(", ")}.`);
       }
     } else if (key === "RangeFunction") {
       for (const fn of (value.functions as Node[]) ?? []) {

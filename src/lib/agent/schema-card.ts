@@ -3,7 +3,7 @@
 
 import type { ViewCard } from "./types.ts";
 
-export const SCHEMA_HASH = "1e0ae77b3700";
+export const SCHEMA_HASH = "d01b6e386f43";
 
 export const SCHEMA_CARD: ViewCard[] = [
   {
@@ -405,6 +405,240 @@ export const SCHEMA_CARD: ViewCard[] = [
         "name": "area",
         "type": "text",
         "description": "on campus or off campus."
+      }
+    ]
+  },
+  {
+    "name": "my_deals",
+    "description": "Purchases and rentals the asking student took part in, as buyer (borrower) or seller (lender). The other student is never shown. A deal moves requested -> accepted -> handed_over -> completed (rentals pass through returned), or ends declined / cancelled.",
+    "roles": [
+      "nlq_student",
+      "nlq_admin"
+    ],
+    "columns": [
+      {
+        "name": "deal_id",
+        "type": "bigint"
+      },
+      {
+        "name": "item_id",
+        "type": "bigint"
+      },
+      {
+        "name": "item_title",
+        "type": "text"
+      },
+      {
+        "name": "category",
+        "type": "text"
+      },
+      {
+        "name": "my_role",
+        "type": "text",
+        "description": "buyer: the student bought or borrowed the item. seller: the student sold or lent it."
+      },
+      {
+        "name": "deal_type",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text",
+        "description": "requested, accepted, declined, handed_over, returned (rentals only), completed or cancelled."
+      },
+      {
+        "name": "agreed_price",
+        "type": "numeric(8,2)",
+        "description": "Price agreed (USD); for rentals the price of the one-week rental. What the student earned (as seller) or paid (as buyer) on completed deals."
+      },
+      {
+        "name": "requested_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "completed_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "rental_start_date",
+        "type": "date"
+      },
+      {
+        "name": "rental_due_date",
+        "type": "date"
+      },
+      {
+        "name": "rental_returned_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "return_condition",
+        "type": "text"
+      },
+      {
+        "name": "returned_late",
+        "type": "boolean"
+      },
+      {
+        "name": "is_overdue",
+        "type": "boolean"
+      },
+      {
+        "name": "requested_on",
+        "type": "date",
+        "description": "Boston-local date of the request. Join to calendar.day."
+      },
+      {
+        "name": "completed_on",
+        "type": "date",
+        "description": "Boston-local date the deal completed; null if not completed."
+      }
+    ]
+  },
+  {
+    "name": "my_listings",
+    "description": "The asking student's own listings, in any status (available, reserved, rented_out, sold, removed). Prices in USD.",
+    "roles": [
+      "nlq_student",
+      "nlq_admin"
+    ],
+    "columns": [
+      {
+        "name": "item_id",
+        "type": "bigint"
+      },
+      {
+        "name": "title",
+        "type": "text"
+      },
+      {
+        "name": "description",
+        "type": "text"
+      },
+      {
+        "name": "category",
+        "type": "text"
+      },
+      {
+        "name": "condition",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text",
+        "description": "available, reserved, rented_out, sold or removed."
+      },
+      {
+        "name": "sale_price",
+        "type": "numeric(8,2)"
+      },
+      {
+        "name": "rent_price_per_week",
+        "type": "numeric(8,2)"
+      },
+      {
+        "name": "rent_deposit",
+        "type": "numeric(8,2)"
+      },
+      {
+        "name": "is_for_sale",
+        "type": "boolean"
+      },
+      {
+        "name": "is_for_rent",
+        "type": "boolean"
+      },
+      {
+        "name": "meetup_spot",
+        "type": "text"
+      },
+      {
+        "name": "listed_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "listed_on",
+        "type": "date",
+        "description": "Boston-local date the listing was posted. Join to calendar.day."
+      }
+    ]
+  },
+  {
+    "name": "my_reviews",
+    "description": "Star ratings the asking student received from others or gave to others after completed deals. Who wrote them is not shown.",
+    "roles": [
+      "nlq_student",
+      "nlq_admin"
+    ],
+    "columns": [
+      {
+        "name": "review_id",
+        "type": "bigint"
+      },
+      {
+        "name": "deal_id",
+        "type": "bigint"
+      },
+      {
+        "name": "direction",
+        "type": "text",
+        "description": "received (someone rated this student) or given (this student rated someone)."
+      },
+      {
+        "name": "rating",
+        "type": "smallint",
+        "description": "1 to 5 stars."
+      },
+      {
+        "name": "reviewed_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "reviewed_on",
+        "type": "date"
+      }
+    ]
+  },
+  {
+    "name": "my_saved_items",
+    "description": "Listings the asking student saved (the heart button), with their current status and price.",
+    "roles": [
+      "nlq_student",
+      "nlq_admin"
+    ],
+    "columns": [
+      {
+        "name": "item_id",
+        "type": "bigint"
+      },
+      {
+        "name": "title",
+        "type": "text"
+      },
+      {
+        "name": "category",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "sale_price",
+        "type": "numeric(8,2)"
+      },
+      {
+        "name": "rent_price_per_week",
+        "type": "numeric(8,2)"
+      },
+      {
+        "name": "saved_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "saved_on",
+        "type": "date",
+        "description": "Boston-local date the listing was saved."
       }
     ]
   },

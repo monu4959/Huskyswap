@@ -108,28 +108,38 @@ Every timestamp also has a Boston-local `*_on` date (e.g. `listed_on`) that join
 
 ## Text-to-SQL agent (Ask HuskySwap)
 
-Students and admins ask questions in plain English on the **Ask** screen (sparkle button on Home). An agent answers by querying the `nlq` schema, using the same loop for the app, the CLI, training-data generation and evals (`src/lib/agent/`):
+Students and admins ask questions in plain English on the **Ask** screen (sparkle button on Home). The agent is an explicit graph (`src/lib/agent/graph.ts`), the same for the app, the CLI, training-data generation and evals:
 
-| File | What |
-|---|---|
-| `run.ts` | The loop: model → tool calls → results → … → `submit_answer` (max 8 steps; the last step must submit) |
-| `tools.ts` | `describe_view`, `sample_values`, `run_sql`, `submit_answer` |
-| `prompt.ts` | System prompt (`PROMPT_VERSION`), one line per view the role can see |
-| `schema-card.ts` | Generated from the `nlq` comments by `npm run schema-card`; its hash marks which schema a run used |
-| `guard.ts` | Parses SQL with Postgres's own parser: one SELECT, `nlq` views the role may see, allowlisted functions only |
-| `db.ts` | Runs guarded SQL as the `nlq_agent` login: read-only transaction, role switch, timeout, 200-row cap, rollback |
-| `llm.ts` | OpenAI-compatible client (teacher on Groq now, fine-tuned student on vLLM later), retries on rate limits |
-| `log.ts` | Every run goes to `ops.agent_runs` (conversation, final SQL, tokens, latency, feedback) |
+```
+question → [1] semantic cache ──hit──► re-run stored SQL → answer
+         → [3] context retriever (views, values, definitions, past queries; no model)
+         → [2] ambiguous? (sees what [3] found) ──yes──► clarifying question
+         → [4] SQL node → [5] guardrails → [6] execute ──error / empty──► back to [4]
+         → [7] answer + grounding check → stored in the cache
+```
 
-`/api/ask` checks the student's session, picks `nlq_student` or `nlq_admin` from their profile, limits each student to 3 questions a minute and 40 a day, and streams progress as newline-delimited JSON.
+| File | Node | What |
+|---|---|---|
+| `cache.ts` | 1 | Similarity ≥ 0.95 *and* the same numbers, polarity (cheapest / most expensive, not), time words and key terms. Scoped by role, and by student for `my_*` SQL; re-runs the SQL on hit; "today / this week" entries expire at midnight; a thumbs-down removes the entry |
+| `retrieve.ts` | 3 | pgvector (gte-small, local) over `ops.rag_docs` + trigram matching of stored values + exact aliases; picks 5–10 views and their joins. Every entry is tagged with the roles allowed to see it |
+| `clarify.ts` | 2 | Asks only when readings give materially different answers (max 2 rounds); never for requests for personal information; returns the resolved question |
+| `sql-node.ts` | 4–6 | Tools `lookup_values`, `run_sql`, `submit_sql`; ≤ 5 model calls, ≤ 3 failed queries, ≤ 2 lookups, repeated calls deduplicated; empty results questioned once |
+| `answer.ts` | 7 | One to three sentences; every number must appear in the result (one retry); contact details masked |
+| `guard.ts` | 5 | Postgres's own parser: one SELECT, `nlq` views and columns the role may see, allowlisted functions |
+| `db.ts` | 6 | Runs as `nlq_agent`: read-only transaction, role switch, server-set `app.user_id` for `my_*` views, timeout, 200-row cap, PII masking, rollback |
+| `semantic-layer.ts`, `examples.ts` | – | Business terms, value aliases, metrics, join paths; verified example queries (never eval questions) |
 
-Setup: migration `supabase/migrations/0004_agent.sql` (the `nlq_agent` login and the run log), then in `.env.local`: `NLQ_DATABASE_URL` (user `nlq_agent.<project-ref>` on the session pooler) and `TEACHER_BASE_URL`, `TEACHER_API_KEY`, `TEACHER_MODEL` (e.g. Groq's free tier with `openai/gpt-oss-120b`).
+The run as a whole has a budget (30K tokens, 110 s). Every run is logged in `ops.agent_runs`, including each node's outcome and every model call. Students can ask about their own listings, deals, saved items and ratings (`my_*` views, migration `0005`); other students' activity stays hidden. The agent never writes data.
+
+Setup: migrations `0004_agent.sql` and `0005_agent_graph.sql`, then in `.env.local`: `NLQ_DATABASE_URL` (user `nlq_agent.<project-ref>` on the session pooler) and `TEACHER_BASE_URL`, `TEACHER_API_KEY`, `TEACHER_MODEL` (e.g. Groq's free tier with `openai/gpt-oss-120b`). Then build the retrieval index with `npm run rag:index`; rerun it after changing the schema, the semantic layer or the examples.
 
 ```bash
 npm run ask -- "how many rentals came back late during spring 2025 move-out?"
-npm run ask -- --role=student "any mini fridges for rent at curry?"
-npm run test:agent-guard   # 37 security checks on the query path (changes nothing)
-npm run smoke:agent        # 26 varied questions through the full agent
+npm run ask -- --role=student --as-user=<student uuid> "how much have I earned from selling?"
+npm run test:agent-guard   # 47 security checks: guard, PII masking, my_* isolation (changes nothing)
+npm run test:retrieval     # retriever finds the right views and values; no model calls
+npm run test:cache         # near-misses never hit, entries stay in their role and student
+npm run smoke:agent        # varied questions through the full graph
 ```
 
 ## Listing photos

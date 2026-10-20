@@ -1,23 +1,8 @@
 // Writes finished runs to ops.agent_runs. Uses the admin connection
 // (DATABASE_URL): the nlq_agent login can't write anything, by design.
 
-import pg from "pg";
+import { opsPool as getPool } from "./ops-db.ts";
 import type { AgentRun } from "./types.ts";
-
-let pool: pg.Pool | null = null;
-function getPool() {
-  if (!pool) {
-    if (!process.env.DATABASE_URL) throw new Error("Missing DATABASE_URL in .env.local");
-    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 2, idleTimeoutMillis: 10_000 });
-    pool.on("error", () => {}); // idle connection dropped by the pooler; the pool replaces it
-  }
-  return pool;
-}
-
-export async function closeLogPool() {
-  await pool?.end();
-  pool = null;
-}
 
 // App questions from this student in the last minute and the last day (rate limits)
 export async function recentAppRuns(userId: string): Promise<{ minute: number; day: number }> {
@@ -51,14 +36,18 @@ export async function logRun(run: AgentRun, meta: RunMeta): Promise<string> {
   const { rows } = await getPool().query(
     `insert into ops.agent_runs (source, user_id, db_role, model, model_version, prompt_version, schema_hash,
        question, messages, reasoning, status, final_sql, answer, result_rows, steps, sql_errors,
-       prompt_tokens, completion_tokens, latency_ms, step_latency_ms, error)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       prompt_tokens, completion_tokens, latency_ms, step_latency_ms, error,
+       resolved_question, cache_hit, clarification, retrieval, nodes, calls)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+             $22, $23, $24, $25, $26, $27)
      returning run_id`,
     [
       meta.source, meta.userId ?? null, run.role, meta.model, meta.modelVersion ?? null, meta.promptVersion, meta.schemaHash,
-      run.question, JSON.stringify(run.messages), JSON.stringify(run.reasoning), run.status, run.finalSql, run.answer,
-      run.result?.ok ? run.result.rowCount : null, run.steps, run.sqlErrors,
-      run.promptTokens, run.completionTokens, run.latencyMs, run.stepLatencyMs, run.error,
+      run.question, JSON.stringify(run.messages), JSON.stringify(run.calls.map((c) => c.reasoning)), run.status, run.finalSql, run.answer,
+      run.result?.ok ? run.result.rowCount : null, run.calls.length, run.sqlErrors,
+      run.promptTokens, run.completionTokens, run.latencyMs, run.calls.map((c) => c.ms), run.error,
+      run.resolvedQuestion, run.cacheHit, run.clarification ? JSON.stringify(run.clarification) : null,
+      run.retrieval ? JSON.stringify(run.retrieval) : null, JSON.stringify(run.nodes), JSON.stringify(run.calls),
     ],
   );
   return rows[0].run_id;

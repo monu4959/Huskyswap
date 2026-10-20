@@ -1,15 +1,19 @@
-// POST /api/ask  { question }  ->  a stream of newline-delimited JSON events
+// POST /api/ask  { question, clarifications? }  ->  a stream of newline-delimited JSON events
 //
-//   {"type":"step", ...}   one per tool call / result, for the progress list
-//   {"type":"done", ...}   the answer, the SQL and its result (first 50 rows)
+//   {"type":"node", ...}   progress through the graph (cache, retrieve, clarify, sql, validate, execute, answer)
+//   {"type":"done", ...}   the answer, the SQL and its result (first 50 rows), or a clarifying question
 //
-// The signed-in student's role decides what the agent can query (see
-// src/lib/agent/auth.ts). Every question is logged in ops.agent_runs.
+// clarifications: earlier clarifying questions in this conversation and the
+// user's answers, sent back with the original question.
+//
+// The signed-in student's role decides what the agent can query, and their id
+// scopes the my_* views (see src/lib/agent/auth.ts). Every question is logged
+// in ops.agent_runs.
 
 import { askerFrom } from "@/lib/agent/auth";
+import { runAgent, type GraphEvent } from "@/lib/agent/graph";
 import { recentAppRuns } from "@/lib/agent/log";
-import { runAgent, type StepEvent } from "@/lib/agent/run";
-import type { AgentRun } from "@/lib/agent/types";
+import type { AgentRun, Clarification, ClarificationTurn } from "@/lib/agent/types";
 
 // The free teacher tier rate-limits per minute, so one question can take a while
 export const maxDuration = 120;
@@ -18,69 +22,61 @@ const PER_MINUTE = 3;
 const PER_DAY = 40;
 const ROWS_SENT = 50;
 
-export type AskStep = {
-  type: "step";
-  step: number;
-  tool: string;
-  phase: "call" | "result";
-  args?: Record<string, unknown>;
-  ok?: boolean;
-};
+export type AskNode = { type: "node" } & GraphEvent;
 
 export type AskDone = {
   type: "done";
   runId: string | null;
   status: AgentRun["status"];
   answer: string | null;
+  clarification: Clarification | null;
   sql: string | null;
   columns: string[];
   rows: Record<string, unknown>[];
   rowCount: number;
   truncated: boolean;
-  steps: number;
+  cacheHit: boolean;
+  modelCalls: number;
   latencyMs: number;
   error: string | null;
 };
 
-function stepEvent(e: StepEvent): AskStep | null {
-  if (e.type === "tool_call") {
-    let args: Record<string, unknown> = {};
-    try {
-      args = JSON.parse(e.args || "{}");
-    } catch {}
-    return { type: "step", step: e.step, tool: e.name, phase: "call", args };
-  }
-  if (e.type === "tool_result") {
-    return { type: "step", step: e.step, tool: e.name, phase: "result", ok: !e.content.startsWith('{"error"') };
-  }
-  return null;
-}
-
 function doneEvent(run: AgentRun): AskDone {
-  const result = run.result?.ok ? run.result : null;
+  // Only an answered run shows its result
+  const result = run.status === "answered" && run.result?.ok ? run.result : null;
   return {
     type: "done",
     runId: run.runId,
     status: run.status,
     answer: run.answer,
-    sql: run.finalSql,
+    clarification: run.clarification,
+    sql: run.status === "answered" ? run.finalSql : null,
     columns: result?.columns ?? [],
     rows: result?.rows.slice(0, ROWS_SENT) ?? [],
     rowCount: result?.rowCount ?? 0,
     truncated: result?.truncated ?? false,
-    steps: run.steps,
+    cacheHit: run.cacheHit,
+    modelCalls: run.calls.length,
     latencyMs: run.latencyMs,
     error: run.status === "error" ? "The assistant couldn't finish this one. Try again in a minute." : null,
   };
+}
+
+function clarificationsFrom(value: unknown): ClarificationTurn[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 2) return null;
+  const turns = value.map((t) => ({ question: String(t?.question ?? "").slice(0, 300), answer: String(t?.answer ?? "").slice(0, 300) }));
+  return turns.every((t) => t.question && t.answer) ? turns : null;
 }
 
 export async function POST(request: Request) {
   const asker = await askerFrom(request);
   if (asker instanceof Response) return asker;
 
-  const body = (await request.json().catch(() => null)) as { question?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { question?: unknown; clarifications?: unknown } | null;
   const question = typeof body?.question === "string" ? body.question.trim() : "";
-  if (question.length < 3 || question.length > 500) {
+  const clarifications = clarificationsFrom(body?.clarifications);
+  if (question.length < 3 || question.length > 500 || !clarifications) {
     return Response.json({ error: "Ask a question between 3 and 500 characters." }, { status: 400 });
   }
 
@@ -91,16 +87,14 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: AskStep | AskDone) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      const send = (event: AskNode | AskDone) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       const run = await runAgent({
         question,
+        clarifications,
         role: asker.role,
         source: "app",
         userId: asker.userId,
-        onStep(e) {
-          const event = stepEvent(e);
-          if (event) send(event);
-        },
+        onEvent: (e) => send({ type: "node", ...e }),
       });
       send(doneEvent(run));
       controller.close();

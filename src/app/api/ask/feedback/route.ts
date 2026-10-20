@@ -1,6 +1,7 @@
 // POST /api/ask/feedback  { runId, value: 1 | -1 }  ->  thumbs up/down on your own question
 
 import { askerFrom } from "@/lib/agent/auth";
+import { cacheForgetRun } from "@/lib/agent/cache";
 import { setFeedback } from "@/lib/agent/log";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -15,5 +16,8 @@ export async function POST(request: Request) {
   if (!runId || !value) return Response.json({ error: "Bad request." }, { status: 400 });
 
   const saved = await setFeedback(runId, asker.userId, value);
-  return saved ? Response.json({ ok: true }) : Response.json({ error: "Not found." }, { status: 404 });
+  if (!saved) return Response.json({ error: "Not found." }, { status: 404 });
+  // A bad answer must not be served again from the cache
+  if (value === -1) await cacheForgetRun(runId);
+  return Response.json({ ok: true });
 }

@@ -9,8 +9,8 @@
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { closePool } from "../src/lib/agent/db.ts";
-import { closeLogPool } from "../src/lib/agent/log.ts";
-import { runAgent } from "../src/lib/agent/run.ts";
+import { closeOpsPool } from "../src/lib/agent/ops-db.ts";
+import { runAgent } from "../src/lib/agent/graph.ts";
 
 process.loadEnvFile(fileURLToPath(new URL("../.env.local", import.meta.url)));
 
@@ -48,12 +48,12 @@ const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.split("=").
 const out = flag("out");
 const only = flag("only")?.split(",").map(Number);
 
-const totals = { answered: 0, refused: 0, gave_up: 0, error: 0, steps: 0, sqlErrors: 0, ms: 0 };
+const totals = { answered: 0, refused: 0, clarify: 0, gave_up: 0, error: 0, steps: 0, sqlErrors: 0, ms: 0 };
 for (const [i, [who, question]] of QUESTIONS.entries()) {
   if (only && !only.includes(i + 1)) continue;
   const run = await runAgent({ question, role: who === "student" ? "nlq_student" : "nlq_admin", source: "test" });
   totals[run.status]++;
-  totals.steps += run.steps;
+  totals.steps += run.calls.length;
   totals.sqlErrors += run.sqlErrors;
   totals.ms += run.latencyMs;
   const firstRows = run.result?.ok ? run.result.rows.slice(0, 3) : null;
@@ -65,11 +65,11 @@ for (const [i, [who, question]] of QUESTIONS.entries()) {
   if (run.error) console.log(`   error: ${run.error}`);
   if (out) appendFileSync(out, JSON.stringify({ n: i + 1, who, question, ...run, messages: undefined }) + "\n");
 }
-const n = totals.answered + totals.refused + totals.gave_up + totals.error;
+const n = totals.answered + totals.refused + totals.clarify + totals.gave_up + totals.error;
 console.log(
-  `\n${n} runs: ${totals.answered} answered, ${totals.refused} refused, ${totals.gave_up} gave up, ${totals.error} errors · ` +
-    `avg ${(totals.steps / n).toFixed(1)} steps · ${totals.sqlErrors} SQL errors · avg ${(totals.ms / n / 1000).toFixed(1)} s`,
+  `\n${n} runs: ${totals.answered} answered, ${totals.refused} refused, ${totals.clarify} asked to clarify, ${totals.gave_up} gave up, ${totals.error} errors · ` +
+    `avg ${(totals.steps / n).toFixed(1)} model calls · ${totals.sqlErrors} SQL errors · avg ${(totals.ms / n / 1000).toFixed(1)} s`,
 );
 
 await closePool();
-await closeLogPool();
+await closeOpsPool();

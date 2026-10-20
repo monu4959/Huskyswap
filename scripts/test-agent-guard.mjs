@@ -66,6 +66,48 @@ await refused("student reads admin view in subquery", "nlq_student", "select (se
 await refused("set-returning function in FROM", "nlq_admin", "select * from pg_ls_dir('.') as t(x)");
 await refused("comment smuggling a second statement", "nlq_admin", "select 1 /* ; */ ; drop table nlq.calendar");
 
+console.log("\nMade-up columns (rejected before running)");
+await refused("alias.column that doesn't exist", "nlq_student", "select l.price from nlq.listings l");
+await refused("view.column that doesn't exist", "nlq_admin", "select deals.buyer_name from nlq.deals");
+await allowed("real qualified columns", "nlq_admin", "select l.title, s.name from nlq.listings_all l join nlq.meetup_spots s on s.spot_id = l.spot_id limit 3");
+
+console.log("\nPrivate details in results");
+{
+  const r = await runSelect("select 'reach me at bob.smith@example.com or (617) 555-0123, ig @bobsells' as t", "nlq_student");
+  const text = r.ok ? r.rows[0].t : r.error;
+  report(r.ok && !/example\.com|555-0123|@bobsells/.test(text), "emails, phone numbers and handles are masked", text);
+}
+
+console.log("\nStudents' own data (my_* views)");
+{
+  const admin = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await admin.connect();
+  const { rows: [a, b] } = await admin.query(
+    "with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals) select id::text, count(*)::int as n from u group by id order by 2 desc limit 2",
+  );
+  const { rows: [{ deal_id: bDeal }] } = await admin.query(
+    "select deal_id from nlq.deals where $1::uuid in (buyer_id, seller_id) and $2::uuid not in (buyer_id, seller_id) limit 1",
+    [b.id, a.id],
+  );
+  await admin.end();
+
+  const count = async (userId) => {
+    const r = await runSelect("select count(*)::int as n from nlq.my_deals", "nlq_student", [], { userId });
+    return r.ok ? r.rows[0].n : r.error;
+  };
+  const [na, nb, none] = [await count(a.id), await count(b.id), await count(null)];
+  report(na === a.n, "student A sees exactly their own deals", `${na} of ${a.n}`);
+  report(nb === b.n, "student B sees exactly their own deals", `${nb} of ${b.n}`);
+  report(none === 0, "nobody signed in: my_deals is empty", String(none));
+  const probe = await runSelect(
+    `select count(*) from nlq.my_deals where 1 / (case when deal_id = ${bDeal} then 0 else 1 end) = 1`,
+    "nlq_student", [], { userId: a.id },
+  );
+  report(probe.ok, "A probing one of B's deals with a divide-by-zero filter learns nothing", probe.ok ? "no error raised" : probe.error);
+  await refused("model sets its own user id", "nlq_student", `select set_config('app.user_id', '${b.id}', true)`);
+  await refused("model reads the user id", "nlq_student", "select current_setting('app.user_id', true)");
+}
+
 console.log("\nDatabase layer alone (guard bypassed on purpose)");
 const db = new pg.Client({ connectionString: process.env.NLQ_DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await db.connect();

@@ -13,9 +13,13 @@
     "schema-card": "node scripts/build-schema-card.mjs",
     "ask": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ask.mjs",
     "test:agent-guard": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-agent-guard.mjs",
-    "smoke:agent": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-agent.mjs"
+    "smoke:agent": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-agent.mjs",
+    "rag:index": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-rag-index.mjs",
+    "test:retrieval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-retrieval.mjs",
+    "test:cache": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-cache.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.0",
     "@supabase/supabase-js": "^2.117.3",
     "libpg-query": "18.1.5",
     "lucide-react": "^1.52.0",
