@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // The SQL guard's Postgres parser loads a .wasm file from its package folder at runtime
+  serverExternalPackages: ["libpg-query"],
+  outputFileTracingIncludes: { "/api/ask": ["./node_modules/libpg-query/wasm/*"] },
   partialPrefetching: true,
   experimental: {
     // Only validate instant navigation where a segment opts in with `instant`.

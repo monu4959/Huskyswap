@@ -106,6 +106,32 @@ The model only ever queries the `nlq` schema (`supabase/migrations/0003_nlq_anal
 
 Every timestamp also has a Boston-local `*_on` date (e.g. `listed_on`) that joins to `calendar.day`, so "last Tuesday" is unambiguous. `nlq_student` sees only `listings`, `meetup_spots`, `categories` and `calendar`; `nlq_admin` sees everything. Both roles are read-only with 3–5 s timeouts. Give them a login password before connecting directly (see `schema.sql`).
 
+## Text-to-SQL agent (Ask HuskySwap)
+
+Students and admins ask questions in plain English on the **Ask** screen (sparkle button on Home). An agent answers by querying the `nlq` schema, using the same loop for the app, the CLI, training-data generation and evals (`src/lib/agent/`):
+
+| File | What |
+|---|---|
+| `run.ts` | The loop: model → tool calls → results → … → `submit_answer` (max 8 steps; the last step must submit) |
+| `tools.ts` | `describe_view`, `sample_values`, `run_sql`, `submit_answer` |
+| `prompt.ts` | System prompt (`PROMPT_VERSION`), one line per view the role can see |
+| `schema-card.ts` | Generated from the `nlq` comments by `npm run schema-card`; its hash marks which schema a run used |
+| `guard.ts` | Parses SQL with Postgres's own parser: one SELECT, `nlq` views the role may see, allowlisted functions only |
+| `db.ts` | Runs guarded SQL as the `nlq_agent` login: read-only transaction, role switch, timeout, 200-row cap, rollback |
+| `llm.ts` | OpenAI-compatible client (teacher on Groq now, fine-tuned student on vLLM later), retries on rate limits |
+| `log.ts` | Every run goes to `ops.agent_runs` (conversation, final SQL, tokens, latency, feedback) |
+
+`/api/ask` checks the student's session, picks `nlq_student` or `nlq_admin` from their profile, limits each student to 3 questions a minute and 40 a day, and streams progress as newline-delimited JSON.
+
+Setup: migration `supabase/migrations/0004_agent.sql` (the `nlq_agent` login and the run log), then in `.env.local`: `NLQ_DATABASE_URL` (user `nlq_agent.<project-ref>` on the session pooler) and `TEACHER_BASE_URL`, `TEACHER_API_KEY`, `TEACHER_MODEL` (e.g. Groq's free tier with `openai/gpt-oss-120b`).
+
+```bash
+npm run ask -- "how many rentals came back late during spring 2025 move-out?"
+npm run ask -- --role=student "any mini fridges for rent at curry?"
+npm run test:agent-guard   # 37 security checks on the query path (changes nothing)
+npm run smoke:agent        # 26 varied questions through the full agent
+```
+
 ## Listing photos
 
 Stand-in photos come from Openverse and Wikimedia Commons under licenses that allow reuse and editing (CC0, Public Domain, CC BY, CC BY-SA). Nothing is scraped from marketplaces or social networks. Every photo was reviewed by hand, and only ones that clearly show the item, with no person as the subject, were kept. Each is credited on its listing and under **Profile → Photo credits**. Three edited versions of each (crop, mirror, color) reduce repetition. New uploads from students go to the `item-images` Storage bucket.

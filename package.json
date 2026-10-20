@@ -9,10 +9,15 @@
     "lint": "eslint",
     "seed": "node scripts/seed-supabase.mjs",
     "test:rls": "node scripts/test-rls.mjs",
-    "sql": "node scripts/sql.mjs"
+    "sql": "node scripts/sql.mjs",
+    "schema-card": "node scripts/build-schema-card.mjs",
+    "ask": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ask.mjs",
+    "test:agent-guard": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-agent-guard.mjs",
+    "smoke:agent": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-agent.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
+    "libpg-query": "18.1.5",
     "lucide-react": "^1.52.0",
     "next": "16.4.0",
     "pg": "^8.23.1",

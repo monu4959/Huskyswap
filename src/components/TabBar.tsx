@@ -6,7 +6,7 @@ import { Heart, House, MessageSquare, Plus, ReceiptText } from "lucide-react";
 import { useStore } from "@/lib/store";
 
 // Screens with their own bottom action bar
-const HIDDEN = [/^\/item\//, /^\/inbox\/.+/, /^\/sell/];
+const HIDDEN = [/^\/item\//, /^\/inbox\/.+/, /^\/sell/, /^\/ask/];
 
 export function TabBar() {
   const pathname = usePathname();
