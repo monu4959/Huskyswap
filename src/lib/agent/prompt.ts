@@ -8,7 +8,7 @@
 import type { Retrieved } from "./retrieve.ts";
 import type { ClarificationTurn, DbRole, SqlResult } from "./types.ts";
 
-export const PROMPT_VERSION = "v2";
+export const PROMPT_VERSION = "v3";
 
 const AUDIENCE: Record<DbRole, string> = {
   nlq_student:
@@ -79,8 +79,12 @@ export function ambiguityUser(question: string, clarifications: ClarificationTur
   const asked = clarifications.length
     ? `\n\nAlready clarified:\n${clarifications.map((c) => `- Asked: ${c.question} Answer: ${c.answer}`).join("\n")}`
     : "";
+  // Columns with short descriptions, so the check never asks about something the schema answers
+  const short = (s: string) => (s.length > 110 ? `${s.slice(0, 110)}…` : s);
   const found = [
-    `Views: ${ctx.views.map((v) => v.name).join(", ")}`,
+    `Views:\n${ctx.views
+      .map((v) => `- ${v.name}: ${short(v.description)}\n  columns: ${v.columns.map((c) => (c.description ? `${c.name} (${short(c.description)})` : c.name)).join("; ")}`)
+      .join("\n")}`,
     ctx.values.length ? `Values found: ${ctx.values.map((v) => `${v.view}.${v.column} = '${v.value}'`).join("; ")}` : "",
     ctx.glossary.length ? `Definitions: ${ctx.glossary.map((g) => `${g.terms[0]}: ${g.meaning}`).join(" | ")}` : "",
   ].filter(Boolean);

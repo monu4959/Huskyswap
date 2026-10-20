@@ -16,7 +16,7 @@ export const MAX_CLARIFY_ROUNDS = 2;
 // model will helpfully offer "the email in the listing?"): they go straight to
 // the SQL node, which refuses them.
 const PERSONAL_INFO =
-  /\b(e-?mails?|phone|cell|number to (call|text)|contact (info|details)|address|insta(gram)?|snap(chat)?|whatsapp|venmo|social media|handle|full name|last name|real name|who('s| is| are)? (selling|buying|the (seller|buyer|lender|borrower)))\b/i;
+  /\b(e-?mails?|phone|cell|number to (call|text)|contact (info|details)|address|insta(gram)?|snap(chat)?|whatsapp|venmo|social media|handle|full name|last name|real name|who('s| is| are)? (selling|buying|the (seller|buyer|lender|borrower))|(chat |the |their )?messages?( text)?|what (they|buyers|sellers|students) (said|wrote|sent))\b/i;
 
 type Call = (messages: ChatMessage[], opts: { json?: boolean }) => Promise<ChatResult>;
 

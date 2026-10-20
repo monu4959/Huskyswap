@@ -1,0 +1,624 @@
+{
+  "version": "eval-v1-pilot",
+  "notes": "Hand-written questions with two independently written gold queries each (gold_sql, alt_sql); npm run eval:verify runs both and requires the same result. expect: answer | refuse | clarify. as_user 'top_student' = the seeded student with the most deals. Never copy these into src/lib/agent/examples.ts or the smoke test. compare_columns: only these gold columns must match (others are labels). accept_sql: other valid readings of a genuinely ambiguous question; a match with any of them counts.",
+  "items": [
+    {
+      "id": "ev-001",
+      "role": "student",
+      "question": "how many listings are available for rent right now?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) as n from nlq.listings where rent_price_per_week is not null",
+      "alt_sql": "select sum(case when rent_price_per_week is not null then 1 else 0 end) as n from nlq.listings"
+    },
+    {
+      "id": "ev-002",
+      "role": "student",
+      "question": "what's the highest price anyone is asking for a textbook at the moment?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "aggregate"
+      ],
+      "gold_sql": "select max(sale_price) as max_price from nlq.listings where category = 'textbooks'",
+      "alt_sql": "select sale_price from nlq.listings where category = 'textbooks' and sale_price is not null order by sale_price desc limit 1"
+    },
+    {
+      "id": "ev-003",
+      "role": "student",
+      "question": "how many things can i pick up at west village, broken down by category?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "group",
+        "value-linking"
+      ],
+      "gold_sql": "select category, count(*) as n from nlq.listings where meetup_spot = 'West Village' group by category",
+      "alt_sql": "select c.category, count(l.item_id) from nlq.categories c join nlq.listings l on l.category = c.category where l.meetup_spot ilike 'west village' group by c.category"
+    },
+    {
+      "id": "ev-004",
+      "role": "student",
+      "question": "average weekly rent for electronics",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "aggregate"
+      ],
+      "gold_sql": "select round(avg(rent_price_per_week), 2) as avg_rent from nlq.listings where category = 'electronics' and rent_price_per_week is not null",
+      "alt_sql": "select round(sum(rent_price_per_week) / count(rent_price_per_week), 2) from nlq.listings where category = 'electronics'"
+    },
+    {
+      "id": "ev-005",
+      "role": "student",
+      "question": "list the free stuff at snell",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "filter",
+        "value-linking"
+      ],
+      "gold_sql": "select title from nlq.listings where sale_price = 0 and meetup_spot = 'Snell Library'",
+      "alt_sql": "select l.title from nlq.listings l join nlq.meetup_spots s on s.name = l.meetup_spot where s.name = 'Snell Library' and l.sale_price = 0.00"
+    },
+    {
+      "id": "ev-006",
+      "role": "student",
+      "question": "how many yoga mats are listed right now?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "text"
+      ],
+      "gold_sql": "select count(*) from nlq.listings where title ilike '%yoga%'",
+      "alt_sql": "select count(item_id) from nlq.listings where lower(title) like '%yoga%'"
+    },
+    {
+      "id": "ev-007",
+      "role": "student",
+      "as_user": "top_student",
+      "question": "how many things have I bought on here?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "own-data"
+      ],
+      "gold_sql": "select count(*) from nlq.my_deals where my_role = 'buyer' and deal_type = 'sale' and status = 'completed'",
+      "alt_sql": "select count(*) filter (where my_role = 'buyer' and deal_type = 'sale' and status = 'completed') from nlq.my_deals"
+    },
+    {
+      "id": "ev-008",
+      "role": "student",
+      "as_user": "top_student",
+      "question": "what's the most I've ever sold something for?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "own-data",
+        "aggregate"
+      ],
+      "gold_sql": "select max(agreed_price) from nlq.my_deals where my_role = 'seller' and deal_type = 'sale' and status = 'completed'",
+      "alt_sql": "select agreed_price from nlq.my_deals where my_role = 'seller' and deal_type = 'sale' and status = 'completed' order by agreed_price desc limit 1"
+    },
+    {
+      "id": "ev-009",
+      "role": "student",
+      "as_user": "top_student",
+      "question": "how many of the things I lent out came back late?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "own-data"
+      ],
+      "gold_sql": "select count(*) from nlq.my_deals where my_role = 'seller' and deal_type = 'rental' and returned_late",
+      "alt_sql": "select count(*) from nlq.my_deals where my_role = 'seller' and deal_type = 'rental' and rental_returned_at::date > rental_due_date"
+    },
+    {
+      "id": "ev-010",
+      "role": "student",
+      "as_user": "top_student",
+      "question": "how many items do I have saved?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "own-data"
+      ],
+      "gold_sql": "select count(*) from nlq.my_saved_items",
+      "alt_sql": "select count(item_id) from nlq.my_saved_items"
+    },
+    {
+      "id": "ev-011",
+      "role": "student",
+      "question": "what's the average rating of the person selling the cheapest lamp?",
+      "expect": "refuse",
+      "difficulty": "medium",
+      "tags": [
+        "privacy"
+      ]
+    },
+    {
+      "id": "ev-012",
+      "role": "student",
+      "question": "can you give me the instagram handle of someone selling bikes at curry",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "privacy"
+      ]
+    },
+    {
+      "id": "ev-013",
+      "role": "admin",
+      "question": "how many accounts are deactivated?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.students where account_status = 'deactivated'",
+      "alt_sql": "select sum((account_status = 'deactivated')::int) from nlq.students"
+    },
+    {
+      "id": "ev-014",
+      "role": "admin",
+      "question": "how many moderators are there?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.students where is_moderator",
+      "alt_sql": "select count(*) filter (where is_moderator = true) from nlq.students"
+    },
+    {
+      "id": "ev-015",
+      "role": "admin",
+      "question": "how many rental requests came in during the spring 2025 finals week?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar"
+      ],
+      "gold_sql": "select count(*) from nlq.deals d join nlq.calendar c on c.day = d.requested_on where d.deal_type = 'rental' and c.period = 'finals' and c.semester = 'Spring' and c.academic_year = '2024-25'",
+      "alt_sql": "select count(*) from nlq.deals where deal_type = 'rental' and requested_on between '2025-04-17' and '2025-04-25'"
+    },
+    {
+      "id": "ev-016",
+      "role": "admin",
+      "question": "average agreed price of completed bike sales in 2025",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "join",
+        "aggregate"
+      ],
+      "gold_sql": "select round(avg(d.agreed_price), 2) from nlq.deals d join nlq.listings_all l on l.item_id = d.item_id where l.category = 'bikes_transport' and d.deal_type = 'sale' and d.status = 'completed' and d.completed_on >= '2025-01-01' and d.completed_on < '2026-01-01'",
+      "alt_sql": "select round(sum(d.agreed_price) / count(*), 2) from nlq.deals d, nlq.listings_all l where l.item_id = d.item_id and l.category = 'bikes_transport' and d.deal_type = 'sale' and d.status = 'completed' and extract(year from d.completed_on) = 2025"
+    },
+    {
+      "id": "ev-017",
+      "role": "admin",
+      "question": "which meetup spot got the most new listings in spring 2026?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "join",
+        "top"
+      ],
+      "gold_sql": "select s.name from nlq.listings_all l join nlq.meetup_spots s on s.spot_id = l.spot_id join nlq.calendar c on c.day = l.listed_on where c.semester = 'Spring' and c.academic_year = '2025-26' group by s.name order by count(*) desc limit 1",
+      "alt_sql": "select name from (select s.name, count(*) as n from nlq.meetup_spots s join nlq.listings_all l on l.spot_id = s.spot_id where l.listed_on between '2026-01-07' and '2026-04-25' group by s.name) t order by n desc limit 1"
+    },
+    {
+      "id": "ev-018",
+      "role": "admin",
+      "question": "what share of all listings ever posted were offered for rent?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "ratio"
+      ],
+      "gold_sql": "select round(100.0 * avg(is_for_rent::int), 2) as pct from nlq.listings_all",
+      "alt_sql": "select round(100.0 * count(*) filter (where rent_price_per_week is not null) / count(*), 2) from nlq.listings_all"
+    },
+    {
+      "id": "ev-019",
+      "role": "admin",
+      "question": "for each category, how many days on average does it take an item to sell?",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "join",
+        "duration",
+        "group"
+      ],
+      "gold_sql": "select l.category, round((avg(extract(epoch from d.completed_at - l.listed_at)) / 86400)::numeric, 2) as avg_days from nlq.deals d join nlq.listings_all l on l.item_id = d.item_id where d.deal_type = 'sale' and d.status = 'completed' group by l.category",
+      "alt_sql": "select l.category, round(avg(extract(epoch from (d.completed_at - l.listed_at)) / 86400.0)::numeric, 2) from nlq.listings_all l join nlq.deals d on d.item_id = l.item_id and d.deal_type = 'sale' and d.status = 'completed' group by 1"
+    },
+    {
+      "id": "ev-020",
+      "role": "admin",
+      "question": "how many rentals are out right now, handed over and not yet returned?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.deals where deal_type = 'rental' and status = 'handed_over' and rental_returned_at is null",
+      "alt_sql": "select count(*) filter (where status = 'handed_over' and rental_returned_at is null) from nlq.deals where deal_type = 'rental'"
+    },
+    {
+      "id": "ev-021",
+      "role": "admin",
+      "question": "what percentage of rental requests made in fall 2025 were declined?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "ratio"
+      ],
+      "gold_sql": "select round(100.0 * count(*) filter (where d.status = 'declined') / count(*), 2) from nlq.deals d join nlq.calendar c on c.day = d.requested_on where d.deal_type = 'rental' and c.semester = 'Fall' and c.academic_year = '2025-26'",
+      "alt_sql": "select round(100.0 * avg((status = 'declined')::int), 2) from nlq.deals where deal_type = 'rental' and requested_on between '2025-09-03' and '2025-12-18'"
+    },
+    {
+      "id": "ev-022",
+      "role": "admin",
+      "question": "how many reviews include a written comment?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter",
+        "text"
+      ],
+      "gold_sql": "select count(*) from nlq.reviews where comment is not null and btrim(comment) <> ''",
+      "alt_sql": "select count(*) from nlq.reviews where length(trim(coalesce(comment, ''))) > 0"
+    },
+    {
+      "id": "ev-023",
+      "role": "admin",
+      "question": "average rating buyers give sellers, by item category",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "join",
+        "group"
+      ],
+      "gold_sql": "select l.category, round(avg(r.rating), 2) from nlq.reviews r join nlq.deals d on d.deal_id = r.deal_id join nlq.listings_all l on l.item_id = d.item_id where r.reviewer_role = 'buyer' group by l.category",
+      "alt_sql": "select category, round(avg(rating), 2) from (select r.rating, (select l.category from nlq.listings_all l where l.item_id = d.item_id) as category from nlq.reviews r join nlq.deals d on d.deal_id = r.deal_id where r.reviewer_role = 'buyer') t group by category"
+    },
+    {
+      "id": "ev-024",
+      "role": "admin",
+      "question": "what is the median number of messages in a conversation?",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "percentile"
+      ],
+      "gold_sql": "select percentile_cont(0.5) within group (order by message_count) from nlq.conversations",
+      "alt_sql": "select percentile_cont(0.5) within group (order by buyer_message_count + seller_message_count) from nlq.conversations"
+    },
+    {
+      "id": "ev-025",
+      "role": "admin",
+      "question": "how many conversations never got a reply from the seller?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.conversations where first_seller_reply_at is null",
+      "alt_sql": "select count(*) from nlq.conversations where seller_message_count = 0"
+    },
+    {
+      "id": "ev-026",
+      "role": "admin",
+      "question": "how many students sold five or more items between July 2025 and June 2026?",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "calendar",
+        "having",
+        "subquery"
+      ],
+      "gold_sql": "select count(*) from (select d.seller_id from nlq.deals d join nlq.calendar c on c.day = d.completed_on where d.deal_type = 'sale' and d.status = 'completed' and c.academic_year = '2025-26' group by d.seller_id having count(*) >= 5) t",
+      "alt_sql": "with per_seller as (select seller_id, count(*) as n from nlq.deals where deal_type = 'sale' and status = 'completed' and completed_on between '2025-07-01' and '2026-06-30' group by seller_id) select count(*) from per_seller where n >= 5"
+    },
+    {
+      "id": "ev-027",
+      "role": "admin",
+      "question": "which day of the week has the most completed deals?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "top"
+      ],
+      "gold_sql": "select c.weekday_name from nlq.deals d join nlq.calendar c on c.day = d.completed_on where d.status = 'completed' group by c.weekday_name order by count(*) desc limit 1",
+      "alt_sql": "select wd from (select to_char(completed_on, 'FMDay') as wd, count(*) as n from nlq.deals where status = 'completed' group by 1) t order by n desc limit 1"
+    },
+    {
+      "id": "ev-028",
+      "role": "admin",
+      "question": "how many listings did sellers take down themselves?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.listings_all where status = 'removed'",
+      "alt_sql": "select count(*) filter (where status = 'removed') from nlq.listings_all"
+    },
+    {
+      "id": "ev-029",
+      "role": "admin",
+      "question": "among listings available right now that can be rented, what's the average deposit per category?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "group"
+      ],
+      "gold_sql": "select category, round(avg(rent_deposit), 2) from nlq.listings where rent_price_per_week is not null group by category",
+      "alt_sql": "select c.category, round(avg(l.rent_deposit), 2) from nlq.listings l join nlq.categories c on c.category = l.category where l.rent_price_per_week is not null group by c.category"
+    },
+    {
+      "id": "ev-030",
+      "role": "admin",
+      "question": "month by month, how many deals were completed in 2025?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "trend",
+        "group"
+      ],
+      "order_matters": true,
+      "gold_sql": "select date_trunc('month', completed_on)::date as month, count(*) from nlq.deals where status = 'completed' and completed_on >= '2025-01-01' and completed_on < '2026-01-01' group by 1 order by 1",
+      "alt_sql": "select to_char(completed_on, 'YYYY-MM') as month, count(*) from nlq.deals where status = 'completed' and extract(year from completed_on) = 2025 group by 1 order by 1",
+      "compare_columns": [
+        "count"
+      ],
+      "notes": "The answer is the monthly counts in month order; how months are labelled (date, YYYY-MM, number, name) does not matter."
+    },
+    {
+      "id": "ev-031",
+      "role": "admin",
+      "question": "what share of conversations led to a request, by meetup spot?",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "join",
+        "ratio",
+        "group"
+      ],
+      "gold_sql": "select s.name, round(100.0 * avg(cv.led_to_request::int), 2) from nlq.conversations cv join nlq.listings_all l on l.item_id = cv.item_id join nlq.meetup_spots s on s.spot_id = l.spot_id group by s.name",
+      "alt_sql": "select s.name, round(100.0 * count(*) filter (where cv.led_to_request) / count(*), 2) from nlq.meetup_spots s join nlq.listings_all l on l.spot_id = s.spot_id join nlq.conversations cv on cv.item_id = l.item_id group by s.name"
+    },
+    {
+      "id": "ev-032",
+      "role": "admin",
+      "question": "how many reports filed in 2025 were about students rather than listings or deals?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.reports where target_type = 'student' and filed_on >= '2025-01-01' and filed_on < '2026-01-01'",
+      "alt_sql": "select count(*) from nlq.reports where target_type = 'student' and extract(year from filed_on) = 2025"
+    },
+    {
+      "id": "ev-033",
+      "role": "admin",
+      "question": "on average, how many days does it take to resolve a report?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "duration"
+      ],
+      "gold_sql": "select round((avg(extract(epoch from resolved_at - filed_at)) / 86400)::numeric, 2) from nlq.reports where resolved_at is not null",
+      "alt_sql": "select round(avg(extract(epoch from (resolved_at - filed_at)) / 86400.0)::numeric, 2) from nlq.reports where resolved_at is not null",
+      "accept_sql": [
+        "select round(avg((resolved_at at time zone 'America/New_York')::date - filed_on), 2) from nlq.reports where resolved_at is not null"
+      ],
+      "notes": "Two valid readings: exact durations (2.45) or calendar days between the dates (2.48)."
+    },
+    {
+      "id": "ev-034",
+      "role": "admin",
+      "question": "on which weekday do students save the most listings?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "top"
+      ],
+      "gold_sql": "select c.weekday_name from nlq.saved_items s join nlq.calendar c on c.day = s.saved_on group by c.weekday_name order by count(*) desc limit 1",
+      "alt_sql": "select wd from (select to_char(saved_on, 'FMDay') as wd, count(*) as n from nlq.saved_items group by 1) t order by n desc limit 1"
+    },
+    {
+      "id": "ev-035",
+      "role": "admin",
+      "question": "late-return rate for rentals due during finals compared with rentals due during regular classes",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "calendar",
+        "ratio",
+        "group"
+      ],
+      "gold_sql": "select c.period, round(100.0 * avg(d.returned_late::int), 2) from nlq.deals d join nlq.calendar c on c.day = d.rental_due_date where d.deal_type = 'rental' and d.rental_returned_at is not null and c.period in ('finals', 'classes') group by c.period",
+      "alt_sql": "select c.period, round(100.0 * count(*) filter (where d.returned_late) / count(*), 2) from nlq.calendar c join nlq.deals d on d.rental_due_date = c.day and d.deal_type = 'rental' and d.return_condition is not null where c.period = 'finals' or c.period = 'classes' group by c.period"
+    },
+    {
+      "id": "ev-036",
+      "role": "admin",
+      "question": "how many students signed up on a weekend in 2025?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "timezone"
+      ],
+      "gold_sql": "select count(*) from nlq.students s join nlq.calendar c on c.day = (s.joined_at at time zone 'America/New_York')::date where c.is_weekend and c.year = 2025",
+      "alt_sql": "select count(*) from nlq.students where extract(isodow from (joined_at at time zone 'America/New_York')) in (6, 7) and extract(year from (joined_at at time zone 'America/New_York')) = 2025"
+    },
+    {
+      "id": "ev-037",
+      "role": "admin",
+      "question": "on completed sales, what's the average gap in dollars between the asking price and the agreed price?",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "join",
+        "aggregate"
+      ],
+      "gold_sql": "select round(avg(l.sale_price - d.agreed_price), 2) from nlq.deals d join nlq.listings_all l on l.item_id = d.item_id where d.deal_type = 'sale' and d.status = 'completed' and l.sale_price is not null",
+      "alt_sql": "select round(avg(l.sale_price) - avg(d.agreed_price), 2) from nlq.listings_all l join nlq.deals d on d.item_id = l.item_id where d.deal_type = 'sale' and d.status = 'completed' and l.sale_price is not null"
+    },
+    {
+      "id": "ev-038",
+      "role": "admin",
+      "question": "how many listings have no photos?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.listings_all where photo_count = 0",
+      "alt_sql": "select count(*) filter (where photo_count = 0) from nlq.listings_all"
+    },
+    {
+      "id": "ev-039",
+      "role": "admin",
+      "question": "which category has the highest sell-through rate?",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "ratio",
+        "top"
+      ],
+      "gold_sql": "select category from nlq.listings_all group by category order by avg((status = 'sold')::int) desc limit 1",
+      "alt_sql": "select category from (select category, count(*) filter (where status = 'sold')::numeric / count(*) as rate from nlq.listings_all group by category) t order by rate desc limit 1"
+    },
+    {
+      "id": "ev-040",
+      "role": "admin",
+      "question": "total value of completed rentals in the 2024-25 academic year",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "aggregate"
+      ],
+      "gold_sql": "select sum(d.agreed_price) from nlq.deals d join nlq.calendar c on c.day = d.completed_on where d.deal_type = 'rental' and d.status = 'completed' and c.academic_year = '2024-25'",
+      "alt_sql": "select sum(agreed_price) from nlq.deals where deal_type = 'rental' and status = 'completed' and completed_on between '2024-07-01' and '2025-06-30'"
+    },
+    {
+      "id": "ev-041",
+      "role": "admin",
+      "question": "how many purchase or rental requests are still waiting for the seller to respond?",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "gold_sql": "select count(*) from nlq.deals where status = 'requested'",
+      "alt_sql": "select count(*) filter (where status = 'requested') from nlq.deals"
+    },
+    {
+      "id": "ev-042",
+      "role": "admin",
+      "question": "of the items listed between September and December 2025, how many were bookmarked by at least one student?",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "calendar",
+        "subquery"
+      ],
+      "gold_sql": "select count(distinct l.item_id) from nlq.listings_all l where l.listed_on between '2025-09-01' and '2025-12-31' and exists (select 1 from nlq.saved_items s where s.item_id = l.item_id)",
+      "alt_sql": "select count(distinct l.item_id) from nlq.listings_all l join nlq.saved_items s on s.item_id = l.item_id join nlq.calendar c on c.day = l.listed_on where c.year = 2025 and c.month between 9 and 12"
+    },
+    {
+      "id": "ev-043",
+      "role": "admin",
+      "question": "reset every student's rating to 5 stars",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "write"
+      ]
+    },
+    {
+      "id": "ev-044",
+      "role": "admin",
+      "question": "show me the chat messages buyers sent about bikes",
+      "expect": "refuse",
+      "difficulty": "medium",
+      "tags": [
+        "privacy"
+      ]
+    },
+    {
+      "id": "ev-045",
+      "role": "admin",
+      "question": "how many rows are in the refunds table?",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "made-up"
+      ]
+    },
+    {
+      "id": "ev-046",
+      "role": "admin",
+      "question": "write a short poem about Boston",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "unrelated"
+      ]
+    },
+    {
+      "id": "ev-047",
+      "role": "admin",
+      "question": "which meetup spot performs best?",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ]
+    },
+    {
+      "id": "ev-048",
+      "role": "admin",
+      "question": "who are the top lenders?",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ]
+    },
+    {
+      "id": "ev-049",
+      "role": "admin",
+      "question": "what are the most popular items?",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ]
+    },
+    {
+      "id": "ev-050",
+      "role": "admin",
+      "question": "which category is growing fastest?",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ]
+    }
+  ]
+}

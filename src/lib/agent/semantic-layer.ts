@@ -5,7 +5,7 @@
 // Change SEMANTIC_VERSION whenever this file changes: it is part of the cache
 // key and of each run's record, like PROMPT_VERSION and SCHEMA_HASH.
 
-export const SEMANTIC_VERSION = "s4";
+export const SEMANTIC_VERSION = "s5";
 
 // Words students use -> what they mean in the data. `views` decides which
 // roles can retrieve the entry (a role must be able to read every view).
@@ -38,7 +38,7 @@ export const GLOSSARY: { terms: string[]; meaning: string; views: string[] }[] =
   { terms: ["graphing calculator", "ti-84", "calculator"], meaning: "Graphing calculators are category 'electronics' with titles like \"TI-84 Plus CE graphing calculator\": search title ILIKE '%graphing%' or '%ti-8%'. Don't use '%calc%' alone: \"calc\" usually means a calculus textbook.", views: ["listings"] },
   { terms: ["time to sell", "days to sell", "how long to sell", "listing to sale"], meaning: "Time from listing to sale = deals.completed_at - listings_all.listed_at for completed sales (deal_type 'sale', status 'completed'); in days: extract(epoch from completed_at - listed_at) / 86400.", views: ["deals", "listings_all"] },
   { terms: ["my listings", "my items", "what i'm selling", "i listed", "i posted"], meaning: "The asking student's own listings are in my_listings.", views: ["my_listings"] },
-  { terms: ["my deals", "i bought", "i sold", "i rented", "i earned", "i spent", "my purchases", "my sales"], meaning: "The asking student's own deals are in my_deals; my_role says whether they were the buyer or the seller. Earned = sum(agreed_price) where my_role = 'seller' and status = 'completed'.", views: ["my_deals"] },
+  { terms: ["my deals", "i bought", "i sold", "i rented", "i earned", "i spent", "my purchases", "my sales"], meaning: "The asking student's own deals are in my_deals; my_role says whether they were the buyer or the seller. Bought / purchases = my_role 'buyer' and deal_type 'sale'; rented or borrowed = my_role 'buyer' and deal_type 'rental'; sold = my_role 'seller' and deal_type 'sale'; lent = my_role 'seller' and deal_type 'rental'. Count completed deals (status 'completed') unless asked otherwise. Earned = sum(agreed_price) where my_role = 'seller' and status = 'completed'.", views: ["my_deals"] },
   { terms: ["my saved", "my favorites", "my wishlist"], meaning: "The asking student's saved listings are in my_saved_items.", views: ["my_saved_items"] },
   { terms: ["my rating", "my reviews", "how am i rated"], meaning: "Ratings the asking student received or gave are in my_reviews (direction received / given).", views: ["my_reviews"] },
 ];

@@ -142,6 +142,19 @@ npm run test:cache         # near-misses never hit, entries stay in their role a
 npm run smoke:agent        # varied questions through the full graph
 ```
 
+### Evaluation
+
+`eval/eval-set.json` holds hand-written questions, each `answer` item with two independently written gold queries; `refuse` and `clarify` items test behavior. The agent's prompts are frozen at git tag `agent-v2-frozen` (prompt `v2`, semantic layer `s4`): changes after it mean a new version.
+
+```bash
+npm run eval:verify              # both gold queries agree, 1-200 rows, no leaks from the verified examples (no model calls)
+npm run eval                     # score the teacher; report in eval/reports/
+npm run eval -- --model=student  # score a student model (STUDENT_BASE_URL, STUDENT_MODEL, STUDENT_VERSION)
+npm run test:compare             # unit checks for the result comparison
+```
+
+Scoring is execution accuracy (`src/lib/agent/compare.ts`): the agent's result must match the gold result; column names and order don't matter, numbers match at shared precision, percentages match fractions, row order counts only when the question asks for it. `eval/audit-pilot.md` is the human audit sheet for the pilot.
+
 ## Listing photos
 
 Stand-in photos come from Openverse and Wikimedia Commons under licenses that allow reuse and editing (CC0, Public Domain, CC BY, CC BY-SA). Nothing is scraped from marketplaces or social networks. Every photo was reviewed by hand, and only ones that clearly show the item, with no person as the subject, were kept. Each is credited on its listing and under **Profile → Photo credits**. Three edited versions of each (crop, mirror, color) reduce repetition. New uploads from students go to the `item-images` Storage bucket.
