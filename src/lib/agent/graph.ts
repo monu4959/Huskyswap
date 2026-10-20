@@ -27,9 +27,9 @@ import { SEMANTIC_VERSION } from "./semantic-layer.ts";
 import { sqlNode } from "./sql-node.ts";
 import type { AgentRun, ChatMessage, ClarificationTurn, DbRole, NodeName } from "./types.ts";
 
-// Time includes waiting out the free teacher tier's per-minute limits; it stays
-// under the API route's 120 s maxDuration
-export const RUN_BUDGET = { tokens: 30_000, ms: 110_000 };
+// Time counts work, not waiting out rate limits (the app is still capped by the
+// API route's 120 s maxDuration)
+export const RUN_BUDGET = { tokens: 30_000, ms: 110_000, waitMs: 120_000 };
 
 export type GraphEvent = {
   node: NodeName | "validate" | "execute";
@@ -82,11 +82,13 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     return value;
   }
 
+  let waitedMs = 0; // rate-limit waiting, excluded from the time budget
+
   // A model call made by a node: checked against the run budget and kept whole
   const caller =
     (name: NodeName) =>
     async (messages: ChatMessage[], options: Parameters<typeof chat>[2]): Promise<ChatResult> => {
-      if (run.promptTokens + run.completionTokens > RUN_BUDGET.tokens || performance.now() - started > RUN_BUDGET.ms) {
+      if (run.promptTokens + run.completionTokens > RUN_BUDGET.tokens || performance.now() - started - waitedMs > RUN_BUDGET.ms || waitedMs > RUN_BUDGET.waitMs) {
         throw new BudgetExceeded("Run budget exceeded");
       }
       const t0 = performance.now();
@@ -101,6 +103,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
         ms: Math.round(performance.now() - t0),
       });
       run.promptTokens += reply.promptTokens;
+      waitedMs += reply.waitedMs;
       run.completionTokens += reply.completionTokens;
       return reply;
     };

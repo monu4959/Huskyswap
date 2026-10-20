@@ -7,6 +7,7 @@
 import type { ChatResult } from "./llm.ts";
 import { ambiguitySystem, ambiguityUser } from "./prompt.ts";
 import type { Retrieved } from "./retrieve.ts";
+import { SCHEMA_CARD } from "./schema-card.ts";
 import type { ChatMessage, Clarification, ClarificationTurn, DbRole } from "./types.ts";
 
 export const MAX_CLARIFY_ROUNDS = 2;
@@ -30,6 +31,19 @@ export function parseJson(text: string | null): Record<string, unknown> | null {
   }
 }
 
+// A student asking about someone else's activity ("the seller of the cheapest bike")
+// gets a refusal, not a clarifying question offering alternatives
+const OTHER_PEOPLE =
+  /\b(?:the|that|this|whose|other|another)\s+(?:seller|buyer|lender|borrower|student|person|user|owner)s?\b|\bsomeone(?: else)?'?s?\b|\bother (?:students|people|users)\b/i;
+
+// "the payments table", "view transactions_archive": a table or view name that isn't in the schema
+function namesMissingTable(question: string) {
+  const names = [...question.toLowerCase().matchAll(/\b([a-z_]+)\s+(?:table|view)s?\b|\b(?:table|view)s?\s+(?:called\s+|named\s+)?([a-z_]+)\b/g)]
+    .map((m) => m[1] ?? m[2])
+    .filter((n) => n && !["the", "a", "this", "that", "of", "my", "your", "data"].includes(n));
+  return names.some((n) => !SCHEMA_CARD.some((v) => v.name === n || v.name === n.replace(/^nlq\./, "")));
+}
+
 function fallbackResolved(question: string, clarifications: ClarificationTurn[]) {
   return clarifications.length ? `${question} (${clarifications.map((c) => c.answer).join("; ")})` : question;
 }
@@ -43,8 +57,17 @@ export async function checkAmbiguity(input: {
   call: Call;
 }): Promise<{ clarify: Clarification | null; resolved: string }> {
   const fallback = fallbackResolved(input.question, input.clarifications);
-  // After two rounds, answer with what we have; never clarify a request for personal information
-  if (input.clarifications.length >= MAX_CLARIFY_ROUNDS || PERSONAL_INFO.test(input.question)) return { clarify: null, resolved: fallback };
+  // After two rounds, answer with what we have; never clarify a request for personal
+  // information, for another student's activity (students), or for a table or view
+  // that doesn't exist: the SQL node refuses or explains those
+  if (
+    input.clarifications.length >= MAX_CLARIFY_ROUNDS ||
+    PERSONAL_INFO.test(input.question) ||
+    (input.role === "nlq_student" && OTHER_PEOPLE.test(input.question)) ||
+    namesMissingTable(input.question)
+  ) {
+    return { clarify: null, resolved: fallback };
+  }
 
   const reply = await input.call(
     [

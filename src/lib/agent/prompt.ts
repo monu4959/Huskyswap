@@ -12,7 +12,7 @@ export const PROMPT_VERSION = "v2";
 
 const AUDIENCE: Record<DbRole, string> = {
   nlq_student:
-    "The person asking is a student. They can see what is listed right now, the reference tables, and their own activity in the my_* views (my_listings, my_deals, my_saved_items, my_reviews). Other students' deals, chats, reviews and activity exist but are not available to students: if a question needs them, say so.",
+    "The person asking is a student. They can see what is listed right now, the reference tables, and their own activity (when the question is about them). Other students' deals, chats, reviews and activity exist but are not available to students: if a question needs them, say so.",
   nlq_admin:
     "The person asking is a HuskySwap admin with access to all analytics views (no names, emails or message text exist in any of them). listings holds only what is available right now; for anything historical (deals, past listings, trends) use listings_all, joined to meetup_spots for spot names. The my_* views hold the admin's own activity as a student.",
 };
@@ -40,7 +40,10 @@ export function contextBlock(ctx: Retrieved) {
   }
   if (ctx.glossary.length) parts.push(`Definitions:\n${ctx.glossary.map((g) => `- ${g.terms.join(", ")}: ${g.meaning}`).join("\n")}`);
   if (ctx.examples.length) {
-    parts.push(`Similar questions answered before (verified SQL; adapt, don't copy blindly):\n${ctx.examples.map((e) => `Q: ${e.question}\n${e.sql}`).join("\n\n")}`);
+    parts.push(
+      `Reference examples: other questions answered before, NOT the current question (verified SQL; adapt, don't copy blindly):\n` +
+        ctx.examples.map((e) => `<example>\nExample question: ${e.question}\nExample SQL:\n${e.sql}\n</example>`).join("\n"),
+    );
   }
   return parts.join("\n\n");
 }
@@ -56,11 +59,16 @@ export function ambiguitySystem(role: DbRole, today: string) {
 
 Today is ${today} (Boston). ${AUDIENCE[role]}
 
-Ask only when plausible readings would give materially different answers and the context can't settle it, for example "best sellers" (by number sold or by money made?) or "busiest month" when the time range matters and none is given. Do not ask when there is a sensible default:
-- "this semester", "this year", "recently" (last 30 days), "right now" have obvious meanings from today's date
-- prices mean asking prices for listings and agreed prices for deals
-- spelling, abbreviations and slang are fine ("orgo", "iv", "rn")
-Never ask about something that can be looked up in the data. Requests for anyone's contact details or identity (email, phone, name, address, social media), to change data, or about unrelated topics are not ambiguous: reply clarify false and never offer alternatives; they will be refused later.
+Ask only for open-ended rankings or comparisons that name no measure, where the measure changes the answer: "best sellers" (by number sold or by money made?), "top categories" (by listings, sales or revenue?), "busiest month" (by listings or deals?). Also ask about the direction of a rating when the wording doesn't settle it: "lender rating" or "seller rating" can mean ratings given by them or ratings they received (not when it says "gave", "rated" or "received"). Almost everything else has a default; use it and don't ask:
+- No time range given: all time. "This semester", "this year", "recently" (last 30 days), "right now" follow from today's date.
+- Semesters, periods (move-in, finals, move-out), academic years and holidays are defined by the calendar view: never ask what dates they cover.
+- Counting is the default measure for "sales", "deals", "listings", "requests" unless money, revenue or value is mentioned.
+- "New listings" means newly posted listings, not item condition.
+- Prices mean asking prices for listings and agreed prices for deals.
+- Rare edge cases (a rental both late and damaged, ties) are handled sensibly, not asked about.
+- Perspective follows the wording: "returned to me" means the asker lent the item; "I bought" means they were the buyer.
+- Spelling, abbreviations and slang are fine ("orgo", "iv", "rn").
+Never ask about something that can be looked up in the data, and never ask about a table or column that isn't offered (it will be explained that it doesn't exist). Requests for anyone's contact details or identity (email, phone, name, address, social media), to change data, or about unrelated topics are not ambiguous: reply clarify false and never offer alternatives; they will be refused later.
 
 Reply with JSON only, one of:
 {"clarify": false, "resolved_question": "<the question restated clearly in one sentence, with any clarification answers folded in>"}
@@ -90,17 +98,23 @@ Today is ${today} (Boston). ${AUDIENCE[role]}
 Write one SELECT using only the views and columns listed in the context, then call submit_sql. It is validated and run; if it fails, returns no rows, or uses something that doesn't exist, you get that back and can fix it. Use lookup_values when you need the exact stored spelling of a name, code, status or title that the context doesn't show, and run_sql to try a query before submitting.
 
 Rules:
-- Read-only: one SELECT over the listed nlq views. Never invent views or columns.
+- Read-only: one SELECT over the nlq views listed in the context. Never invent views or columns.
+- my_* views hold only the asker's own activity: use them only when the question is about the asker ("I", "my", "me").
+- Round averages, percentages and durations to at most 2 decimals.
 - The final query must answer everything asked in its result alone (for "how many and what share", return both, e.g. with count(*) filter (where ...)).
 - ${DATE_RULES}
 - Prices are USD. A null sale_price means not for sale; 0 means free.
 - Titles and descriptions are typed by students (typos, abbreviations, all caps): match both with ILIKE and allow variants.
 - "What / which / any / show me" questions want the matching rows (title, price, place and similar), not just a count. Add LIMIT only for a top N, a sample, or a ranking with no number ("best sellers", "most popular": top 10).
+- No time range in the question means all time.
+- If the question names a table or column that isn't listed, call submit_sql with sql null and say it doesn't exist, naming the closest views that do.
 - Personal information (names, emails, message text) is not in the database. If asked for it, for other students' private activity, to change data, or for anything unrelated to HuskySwap data, call submit_sql with sql null and a short reason.`;
 }
 
+// The question goes first and last, the context in between, so reference
+// examples are never mistaken for the question being asked
 export function sqlUser(question: string, ctx: Retrieved) {
-  return `${contextBlock(ctx)}\n\nQuestion: ${question}`;
+  return `Question to answer: ${question}\n\n<context>\n${contextBlock(ctx)}\n</context>\n\nWrite the SQL for the question to answer: ${question}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +123,7 @@ export function sqlUser(question: string, ctx: Retrieved) {
 export function answerSystem(today: string) {
   return `You explain database results to students and staff of HuskySwap, Northeastern University's student marketplace. Today is ${today} (Boston).
 
-Write one to three plain sentences that answer the question from the result. Use only numbers that appear in the result (or its row count); do not compute new ones. When the result lists items, say how many and mention a few. If the result is empty, say plainly that nothing matched, restating what was looked for (e.g. "There are no mini fridges for rent at Curry Student Center right now."). No markdown, no SQL.
+Write one to three plain sentences that answer the question from the result. Use only numbers that appear in the result (or its row count); do not compute new ones. If the question gave no time range, say the figures cover all time. Round long decimals to at most 2 places. When the result lists items, say how many and mention a few. If the result is empty, say plainly that nothing matched, restating what was looked for (e.g. "There are no mini fridges for rent at Curry Student Center right now."). No markdown, no SQL.
 
 Reply with JSON only: {"answer": "<your answer>"}`;
 }

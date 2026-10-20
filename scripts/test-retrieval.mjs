@@ -25,6 +25,10 @@ const CASES = [
   { role: "nlq_admin", q: "how many students got suspended", views: ["students"], values: ["account_status=suspended"] },
   { role: "nlq_admin", q: "graphing calculators sold in fall 2024", views: ["calendar"], titles: ["calc"] },
   { role: "nlq_admin", q: "share of chats that turned into a request", views: ["conversations"], glossary: ["conversion"] },
+  { role: "nlq_student", q: "how many textbooks are listed at snell", views: ["listings"], values: ["category=textbooks", "name=Snell Library"] },
+  { role: "nlq_student", q: "average price of desks for sale", views: ["listings"] },
+  { role: "nlq_admin", q: "monthly new listings for the last 6 months", views: ["listings_all"], noValues: ["condition=new"] },
+  { role: "nlq_admin", q: "how many like new items were listed in fall 2025", values: ["condition=like_new"] },
 ];
 
 let failures = 0;
@@ -38,6 +42,7 @@ for (const c of CASES) {
     ...(c.titles ?? []).filter((t) => !r.titles.some((h) => h.value.includes(t))).map((t) => `no title like "${t}"`),
     ...(c.glossary ?? []).filter((g) => !r.glossary.some((e) => e.terms.some((t) => t.includes(g)))).map((g) => `no glossary "${g}"`),
     ...(c.noViews ?? []).filter((v) => views.includes(v)).map((v) => `LEAKED view ${v}`),
+    ...(c.noValues ?? []).filter((v) => values.includes(v)).map((v) => `misleading value ${v}`),
   ];
   if (problems.length) failures++;
   console.log(`${problems.length ? "FAIL" : "PASS"}  [${c.role === "nlq_admin" ? "admin" : "student"}] ${c.q}  (${r.ms} ms)${problems.length ? `  ->  ${problems.join("; ")}` : ""}`);

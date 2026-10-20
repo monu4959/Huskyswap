@@ -131,7 +131,7 @@ question → [1] semantic cache ──hit──► re-run stored SQL → answer
 
 The run as a whole has a budget (30K tokens, 110 s). Every run is logged in `ops.agent_runs`, including each node's outcome and every model call. Students can ask about their own listings, deals, saved items and ratings (`my_*` views, migration `0005`); other students' activity stays hidden. The agent never writes data.
 
-Setup: migrations `0004_agent.sql` and `0005_agent_graph.sql`, then in `.env.local`: `NLQ_DATABASE_URL` (user `nlq_agent.<project-ref>` on the session pooler) and `TEACHER_BASE_URL`, `TEACHER_API_KEY`, `TEACHER_MODEL` (e.g. Groq's free tier with `openai/gpt-oss-120b`). Then build the retrieval index with `npm run rag:index`; rerun it after changing the schema, the semantic layer or the examples.
+Setup: migrations `0004_agent.sql` and `0005_agent_graph.sql`, then in `.env.local`: `NLQ_DATABASE_URL` (user `nlq_agent.<project-ref>` on the session pooler) and `TEACHER_BASE_URL`, `TEACHER_API_KEY`, `TEACHER_MODEL` (e.g. Groq's free tier with `openai/gpt-oss-120b`). Optional `TEACHER_API_KEYS` (comma-separated) adds keys to a pool: requests go round-robin, and a rate-limited key rests for as long as the server says while the next one takes over. Then build the retrieval index with `npm run rag:index`; rerun it after changing the schema, the semantic layer or the examples.
 
 ```bash
 npm run ask -- "how many rentals came back late during spring 2025 move-out?"

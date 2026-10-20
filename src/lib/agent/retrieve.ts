@@ -59,10 +59,15 @@ export function summarize(r: Retrieved): RetrievalSummary {
 
 type Row = { src: string; kind: string; view_name: string | null; column_name: string | null; value: string | null; meta: Record<string, unknown>; score: number };
 
+// Everyday words that are also stored values (listing condition): only matched in
+// pairs like "like new", "brand new", "good condition", never alone ("new listings")
+const AMBIGUOUS_VALUE_WORDS = new Set(["new", "good", "fair", "like"]);
+
 // Words and word pairs to match against stored values; titles only get item words
 function tokens(question: string) {
-  const words = question.toLowerCase().split(/[^a-z0-9'-]+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
-  const bigrams = words.slice(1).map((w, i) => `${words[i]} ${w}`);
+  const all = question.toLowerCase().split(/[^a-z0-9'-]+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+  const bigrams = all.slice(1).map((w, i) => `${all[i]} ${w}`);
+  const words = all.filter((w) => !AMBIGUOUS_VALUE_WORDS.has(w));
   const itemWords = words.filter((w) => !NOT_ITEMS.has(w) && w.length >= 4 && !/^\d+$/.test(w));
   const itemBigrams = itemWords.slice(1).map((w, i) => `${itemWords[i]} ${w}`);
   return { all: [...new Set([...words, ...bigrams])], items: [...new Set([...itemWords, ...itemBigrams])] };
@@ -122,21 +127,33 @@ export async function retrieve(
     else addValue({ view: r.view_name!, column: r.column_name!, value: r.value!, score: r.score, via: r.src as ValueHit["via"] });
   }
 
+  // Definitions and examples about the my_* views only when the question is about the asker
+  const personal = (views: string[]) => views.some((v) => v.startsWith("my_"));
   const glossary = rows
     .filter((r) => r.kind === "glossary" && r.score >= THRESHOLDS.glossary)
-    .map((r) => ({ terms: r.meta.terms as string[], meaning: r.meta.meaning as string, views: r.meta.views as string[], score: r.score }));
+    .map((r) => ({ terms: r.meta.terms as string[], meaning: r.meta.meaning as string, views: r.meta.views as string[], score: r.score }))
+    .filter((g) => aboutMe || !personal(g.views));
   const exampleHits = rows
     .filter((r) => r.kind === "example" && r.score >= THRESHOLDS.example)
-    .map((r) => ({ question: r.meta.question as string, sql: r.meta.sql as string, views: r.meta.views as string[], score: r.score }));
+    .map((r) => ({ question: r.meta.question as string, sql: r.meta.sql as string, views: r.meta.views as string[], score: r.score }))
+    .filter((e) => aboutMe || !personal(e.views));
 
-  // Views: best schema matches, plus every view a value, glossary entry or example points to
+  // Views: best schema matches, plus every view a value, glossary entry or example points to.
+  // my_* views are dropped before ranking unless the question is about the asker.
   const viewScore = new Map<string, number>();
   const bump = (view: string, score: number) => viewScore.set(view, Math.max(viewScore.get(view) ?? 0, score));
-  for (const r of rows.filter((r) => r.kind === "view" || r.kind === "column")) bump(r.view_name!, r.score);
+  for (const r of rows.filter((r) => (r.kind === "view" || r.kind === "column") && (aboutMe || !r.view_name!.startsWith("my_")))) {
+    bump(r.view_name!, r.score);
+  }
   const ranked = [...viewScore.entries()].sort((a, b) => b[1] - a[1]);
   const chosen = new Set(ranked.filter(([, s], i) => i < MIN_VIEWS || s >= ranked[0][1] - 0.04).map(([v]) => v));
   for (const hit of values.values()) chosen.add(hit.view);
-  if (titles.size) chosen.add(role === "nlq_admin" ? "listings_all" : "listings");
+  // The listings fact view: students always get theirs (it's all they can query about
+  // items); admins get listings_all when the question matched categories, spots or titles
+  const listingsView = role === "nlq_admin" ? "listings_all" : "listings";
+  if (role === "nlq_student" || titles.size || [...values.values()].some((h) => ["categories", "meetup_spots", "listings_all"].includes(h.view))) {
+    chosen.add(listingsView);
+  }
   for (const g of glossary) g.views.forEach((v) => chosen.add(v));
   for (const e of exampleHits) e.views.forEach((v) => chosen.add(v));
   if (TIME_WORDS.test(question)) chosen.add("calendar");
@@ -148,6 +165,8 @@ export async function retrieve(
     .filter((v): v is ViewCard => !!v)
     .sort((a, b) => order(b.name) - order(a.name))
     .slice(0, MAX_VIEWS);
+  // Never hand the SQL node an empty schema: fall back to the role's main listings view
+  if (!views.length) views.push(allowed.find((v) => v.name === (role === "nlq_admin" ? "listings_all" : "listings"))!);
   const names = new Set(views.map((v) => v.name));
 
   return {

@@ -50,7 +50,7 @@ export const SQL_TOOLS = [
         "Submit the final SELECT that answers the question. It is validated and run; errors, unknown views or columns, and empty results come back to you. Use sql null with a reason when the question must not or cannot be answered from these views.",
       parameters: {
         type: "object",
-        properties: { sql: { type: ["string", "null"] }, reason: { type: "string" } },
+        properties: { sql: { type: ["string", "null"] }, reason: { type: ["string", "null"] } },
         required: ["sql"],
       },
     },
@@ -211,11 +211,13 @@ export async function sqlNode(input: {
     if (out.sqlErrors >= SQL_LIMITS.failures) break;
   }
 
-  // Out of calls after a valid submission (questioned only for being empty): accept it.
-  // Otherwise keep the last query that ran, but don't call it answered.
+  // Out of calls after a submission that ran and returned rows: accept it. An empty
+  // result counts only when the model confirmed it by resubmitting (handled above):
+  // an unconfirmed "nothing found" is too often a wrong filter. Otherwise keep the
+  // last query that ran, but don't call it answered.
   const accepted = submitted as { sql: string; result: SqlResult } | null; // (assigned inside handle)
   const fallback = lastOk as { sql: string; result: SqlResult } | null;
-  if (out.status === "gave_up" && accepted) {
+  if (out.status === "gave_up" && accepted?.result.ok && accepted.result.rowCount > 0) {
     out.status = "answered";
     out.sql = accepted.sql;
     out.result = accepted.result;
