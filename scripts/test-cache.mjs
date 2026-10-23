@@ -21,13 +21,16 @@ function report(pass, label, detail = "") {
 const runId = randomUUID(); // tags this test's entries for cleanup
 const [studentA, studentB] = [randomUUID(), randomUUID()];
 const ok = { ok: true, columns: ["n"], rows: [{ n: 1 }], rowCount: 1, truncated: false };
+const stored = new Set(); // only this test's entries count (the real cache may hold the same questions)
 const store = async (question, role, sql, userId = null) => {
+  stored.add(question);
   const [vector] = await embed([question]);
   await cacheStore({ question, vector, role, userId, sql, answer: "test", result: ok, runId });
 };
 const lookup = async (question, role, userId = null) => {
   const [vector] = await embed([question]);
-  return cacheLookup(question, vector, role, userId);
+  const hit = await cacheLookup(question, vector, role, userId);
+  return hit && stored.has(hit.question) ? hit : null;
 };
 
 try {
