@@ -71,6 +71,12 @@ await refused("alias.column that doesn't exist", "nlq_student", "select l.price 
 await refused("view.column that doesn't exist", "nlq_admin", "select deals.buyer_name from nlq.deals");
 await allowed("real qualified columns", "nlq_admin", "select l.title, s.name from nlq.listings_all l join nlq.meetup_spots s on s.spot_id = l.spot_id limit 3");
 
+console.log("\nTime zones (UTC timestamps must be converted before taking the date)");
+await refused("timestamptz::date (alias)", "nlq_admin", "select avg(r.resolved_at::date - r.filed_on) from nlq.reports r");
+await refused("cast(timestamptz as date)", "nlq_student", "select count(*) from nlq.listings where cast(listed_at as date) = '2025-04-21'");
+await allowed("converted to Boston first", "nlq_admin", "select avg((resolved_at at time zone 'America/New_York')::date - filed_on) from nlq.reports where resolved_at is not null");
+await allowed("date column cast is fine", "nlq_admin", "select count(*) from nlq.deals where rental_due_date::date > '2025-01-01'");
+
 console.log("\nPrivate details in results");
 {
   const r = await runSelect("select 'reach me at bob.smith@example.com or (617) 555-0123, ig @bobsells' as t", "nlq_student");

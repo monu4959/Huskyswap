@@ -128,14 +128,18 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     return true;
   }
 
-  let cacheVector: number[] | null = null; // embedding of the question the cache should store
+  // The cache key: the question as asked, plus any clarification answers. Stable
+  // across runs (the model's rewording of a clarified question isn't), so a repeated
+  // clarified question is served before any model call.
+  const cacheKey = clarifications.length ? `${opts.question} (${clarifications.map((c) => c.answer).join("; ")})` : opts.question;
+  let cacheVector: number[] | null = null; // embedding of cacheKey
   try {
     const [vector] = await embed([opts.question]);
-    cacheVector = vector;
+    [cacheVector] = clarifications.length ? await embed([cacheKey]) : [vector];
 
-    // [1] Semantic cache (only for a fresh question; after a clarification, see below)
-    if (useCache && !clarifications.length) {
-      const hit = await node("cache", () => cacheLookup(opts.question, vector, opts.role, userId), (h) => (h ? `hit ${h.similarity.toFixed(3)}` : "miss"));
+    // [1] Semantic cache
+    if (useCache) {
+      const hit = await node("cache", () => cacheLookup(cacheKey, cacheVector!, opts.role, userId), (h) => (h ? `hit ${h.similarity.toFixed(3)}` : "miss"));
       if (hit && (await serve(hit))) return await finish();
     }
 
@@ -160,17 +164,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
       run.answer = amb.clarify.question;
       return await finish();
     }
-    // Without clarifications the question stands as asked; with them, the resolved
-    // version is what gets answered and cached
+    // Without clarifications the question stands as asked; with them, the model's
+    // resolved version is what the SQL node answers
     const resolved = clarifications.length ? amb.resolved : opts.question;
     run.resolvedQuestion = resolved;
-    if (clarifications.length) {
-      [cacheVector] = await embed([resolved]);
-      if (useCache) {
-        const hit = await node("cache", () => cacheLookup(resolved, cacheVector!, opts.role, userId), (h) => (h ? `hit ${h.similarity.toFixed(3)}` : "miss"));
-        if (hit && (await serve(hit))) return await finish();
-      }
-    }
 
     // [4]-[6] SQL node with guardrails, execution and the feedback loop
     const sql = await node(
@@ -232,7 +229,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     // Only fresh, grounded answers go into the cache
     if (useCache && run.status === "answered" && !run.cacheHit && run.grounded && run.finalSql && run.result && cacheVector) {
       await cacheStore({
-        question: run.resolvedQuestion ?? run.question, vector: cacheVector, role: opts.role, userId,
+        question: cacheKey, vector: cacheVector, role: opts.role, userId,
         sql: run.finalSql, answer: run.answer ?? "", result: run.result, runId: run.runId,
       }).catch((e) => (run.error = [run.error, `cache store failed: ${(e as Error).message}`].filter(Boolean).join("; ")));
     }

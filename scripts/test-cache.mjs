@@ -37,6 +37,8 @@ try {
   await store("listings posted this week", "nlq_admin", "select 1");
   await store("bikes that sold in fall 2024", "nlq_admin", "select 1");
   await store("how much have I earned from selling", "nlq_student", "select sum(agreed_price) from nlq.my_deals", studentA);
+  await store("any mini fridges for rent at curry?", "nlq_student", "select 1");
+  await store("how many mini fridges were listed at curry this semester", "nlq_admin", "select 1");
 
   console.log("Should hit");
   for (const [q, role, user] of [
@@ -57,6 +59,8 @@ try {
     ["how many bikes are listed", "nlq_admin", null, "student entry, admin asking"],
     ["how much have I earned from selling", "nlq_student", studentB, "another student's my_* entry"],
     ["how much have I earned from selling", "nlq_student", null, "my_* entry, nobody signed in"],
+    ["any mini fridges for sale at curry?", "nlq_student", null, "for rent vs for sale"],
+    ["how many mini fridges were listed at snell this semester", "nlq_admin", null, "curry vs snell"],
   ]) {
     const hit = await lookup(q, role, user);
     report(!hit, `"${q}" (${why})`, hit ? `HIT "${hit.question}" (${hit.similarity.toFixed(3)})` : "miss");

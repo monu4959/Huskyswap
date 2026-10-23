@@ -142,6 +142,20 @@ export async function checkSql(input: string, role: DbRole): Promise<GuardResult
         const v = known[0];
         problems.push(`Column ${qualifier}.${column} does not exist in ${v.name}. Its columns: ${v.columns.map((c) => c.name).join(", ")}.`);
       }
+    } else if (key === "TypeCast") {
+      // A UTC timestamp cast straight to a date gives the UTC day, not Boston's: a
+      // silent off-by-one-day bug next to the Boston-local *_on columns
+      const target = ((value.typeName as { names: Node[] }).names.at(-1)?.String as { sval: string } | undefined)?.sval;
+      const ref = (value.arg as Node).ColumnRef as Node | undefined;
+      if (target === "date" && ref) {
+        const fields = (ref.fields as Node[]).map((f) => (f.String as { sval: string } | undefined)?.sval);
+        const column = fields.at(-1);
+        const candidates = fields.length > 1 ? [...(aliases.get(fields.at(-2)!) ?? [])] : [...new Set([...aliases.values()].flatMap((s) => [...s]))];
+        const isUtc = candidates.some((v) => SCHEMA_CARD.find((c) => c.name === v)?.columns.some((c) => c.name === column && c.type === "timestamptz"));
+        if (column && isUtc) {
+          problems.push(`${column} is a UTC timestamp, so ${column}::date is the UTC day. Use (${column} at time zone 'America/New_York')::date, or the view's Boston-local *_on date column.`);
+        }
+      }
     } else if (key === "RangeFunction") {
       for (const fn of (value.functions as Node[]) ?? []) {
         const call = ((fn.List as { items: Node[] }).items[0] as Node).FuncCall as Node | undefined;

@@ -17,7 +17,9 @@ import type { Retrieved } from "./retrieve.ts";
 import { SCHEMA_CARD } from "./schema-card.ts";
 import type { ChatMessage, DbRole, SqlResult, ToolCall } from "./types.ts";
 
-export const SQL_LIMITS = { calls: 5, failures: 3, lookups: 2 };
+export const SQL_LIMITS = { calls: 6, failures: 3, lookups: 2 };
+const LAST_CALL =
+  "This is your last step: call submit_sql now with your final SQL. If you have checked and nothing matching is the right answer, submit the same SQL again.";
 const ROWS_SHOWN = 25; // rows the model sees from a result
 const CELL_CHARS = 120; // longer text cells are cut
 
@@ -187,9 +189,12 @@ export async function sqlNode(input: {
 
   for (let n = 1; n <= SQL_LIMITS.calls; n++) {
     const last = n === SQL_LIMITS.calls;
+    // Last call: only submit_sql is offered, with a plain instruction. (Forcing it with
+    // tool_choice "required" fails too often on hosted gpt-oss.)
+    if (last) messages.push({ role: "user", content: LAST_CALL });
     let reply: ChatResult;
     try {
-      reply = await input.call(messages, { tools: last ? SUBMIT_ONLY : SQL_TOOLS, requireTool: last });
+      reply = await input.call(messages, { tools: last ? SUBMIT_ONLY : SQL_TOOLS });
     } catch (e) {
       if (!last) throw e;
       break; // the model wouldn't submit on its last call

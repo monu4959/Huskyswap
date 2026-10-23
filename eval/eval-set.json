@@ -114,7 +114,7 @@
         "own-data"
       ],
       "gold_sql": "select count(*) from nlq.my_deals where my_role = 'seller' and deal_type = 'rental' and returned_late",
-      "alt_sql": "select count(*) from nlq.my_deals where my_role = 'seller' and deal_type = 'rental' and rental_returned_at::date > rental_due_date"
+      "alt_sql": "select count(*) from nlq.my_deals where my_role = 'seller' and deal_type = 'rental' and (rental_returned_at at time zone 'America/New_York')::date > rental_due_date"
     },
     {
       "id": "ev-010",

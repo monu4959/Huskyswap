@@ -29,6 +29,10 @@ const POLARITY: Record<string, string> = {
   many: "count", count: "count", number: "count", percent: "pct", percentage: "pct", share: "pct", rate: "pct",
   before: "before", until: "before", after: "after", since: "after",
   more: "more", over: "more", above: "more", less: "less", fewer: "less", under: "less", below: "less",
+  // Buying and renting are different questions ("for rent" vs "for sale")
+  rent: "rent", rental: "rent", rentals: "rent", renting: "rent", rented: "rent", borrow: "rent", borrowed: "rent", lend: "rent", lent: "rent", lender: "rent", lenders: "rent",
+  sale: "sale", sales: "sale", sell: "sale", selling: "sale", sold: "sale", buy: "sale", bought: "sale", purchase: "sale", purchases: "sale",
+  free: "free",
 };
 const TIME = new Set(
   "today yesterday tomorrow now currently rn week weekend month year semester term spring summer fall autumn winter finals move-in move-out break holiday last this next past previous recent recently jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july august september october november december monday tuesday wednesday thursday friday saturday sunday".split(" "),
@@ -59,11 +63,12 @@ export function slotsOf(question: string): Slots {
   return { numbers: uniq(numbers), polarity: uniq(polarity), time: uniq(time), terms: uniq(terms) };
 }
 
+// Every slot must match exactly, key terms included: one different word ("curry" vs
+// "snell") can change the answer, and a wrong cached answer is worse than a miss.
+// Stemming keeps true paraphrases equal ("bikes listed" = "bike listings").
 function compatible(a: Slots, b: Slots) {
   const same = (x: string[], y: string[]) => x.length === y.length && x.every((v, i) => v === y[i]);
-  const union = new Set([...a.terms, ...b.terms]);
-  const shared = a.terms.filter((t) => b.terms.includes(t)).length;
-  return same(a.numbers, b.numbers) && same(a.polarity, b.polarity) && same(a.time, b.time) && (union.size === 0 || shared / union.size >= 0.5);
+  return same(a.numbers, b.numbers) && same(a.polarity, b.polarity) && same(a.time, b.time) && same(a.terms, b.terms);
 }
 
 export function resultHash(result: SqlResult) {

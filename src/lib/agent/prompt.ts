@@ -8,7 +8,7 @@
 import type { Retrieved } from "./retrieve.ts";
 import type { ClarificationTurn, DbRole, SqlResult } from "./types.ts";
 
-export const PROMPT_VERSION = "v3";
+export const PROMPT_VERSION = "v4";
 
 const AUDIENCE: Record<DbRole, string> = {
   nlq_student:
