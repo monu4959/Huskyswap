@@ -20,7 +20,8 @@
     "test:compare": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-compare.mjs",
     "eval:verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval-verify.mjs",
     "eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval.mjs",
-    "eval:rescore": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval-rescore.mjs"
+    "eval:rescore": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval-rescore.mjs",
+    "datagen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/datagen.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",

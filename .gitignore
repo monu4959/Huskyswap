@@ -48,3 +48,6 @@ public/items/*-c[0-9]*.webp
 
 # Downloaded embedding models (transformers.js)
 /.cache/
+
+# Generated training data (large; published separately)
+/ml/datasets/
