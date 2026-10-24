@@ -2,6 +2,7 @@
 //
 //   npm run eval                              teacher (TEACHER_* in .env.local)
 //   npm run eval -- --model=student           student (STUDENT_BASE_URL, STUDENT_API_KEY, STUDENT_MODEL, STUDENT_VERSION)
+//   npm run eval -- --model=student --student-model=huskyswap-student-stage1-r1   another adapter on that server
 //   npm run eval -- --only=ev-001,ev-019 --parallel=2 --no-examples --label=teacher-pilot
 //
 // Scoring:
@@ -30,6 +31,9 @@ const set = JSON.parse(readFileSync(new URL("../eval/eval-set.json", import.meta
 function studentConfig() {
   const { STUDENT_BASE_URL, STUDENT_API_KEY, STUDENT_MODEL, STUDENT_VERSION } = process.env;
   if (!STUDENT_BASE_URL || !STUDENT_MODEL) throw new Error("Set STUDENT_BASE_URL and STUDENT_MODEL in .env.local");
+  // --student-model picks another adapter on the same server (e.g. huskyswap-student-stage1-r1)
+  const name = flag("student-model");
+  if (name) return { label: name, version: name.replace(/^huskyswap-student-/, ""), baseUrl: STUDENT_BASE_URL, apiKeys: [STUDENT_API_KEY ?? "none"], model: name };
   return { label: STUDENT_MODEL, version: STUDENT_VERSION, baseUrl: STUDENT_BASE_URL, apiKeys: [STUDENT_API_KEY ?? "none"], model: STUDENT_MODEL };
 }
 const model = flag("model") === "student" ? studentConfig() : teacherConfig();
