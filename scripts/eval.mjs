@@ -4,6 +4,9 @@
 //   npm run eval -- --model=student           student (STUDENT_BASE_URL, STUDENT_API_KEY, STUDENT_MODEL, STUDENT_VERSION)
 //   npm run eval -- --model=student --student-model=huskyswap-student-stage1-r1   another adapter on that server
 //   npm run eval -- --only=ev-001,ev-019 --parallel=2 --no-examples --label=teacher-pilot
+//   npm run eval -- --set=eval/test-set.json --label=teacher-test     held-out test set (default: the pilot, eval/eval-set.json)
+//   npm run eval -- --model=student --update=eval/reports/<report>.json   rerun the items that errored (e.g. the
+//                                             tunnel went down), or the --only items, and update that report in place
 //
 // Scoring:
 //   answer items   correct when the agent answers and its result matches the gold
@@ -14,7 +17,8 @@
 // The report goes to eval/reports/<date>-<label>.json.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { compareResults, projectColumns } from "../src/lib/agent/compare.ts";
 import { closePool, runSelect } from "../src/lib/agent/db.ts";
 import { runAgent } from "../src/lib/agent/graph.ts";
@@ -26,7 +30,7 @@ import { SEMANTIC_VERSION } from "../src/lib/agent/semantic-layer.ts";
 process.loadEnvFile(fileURLToPath(new URL("../.env.local", import.meta.url)));
 const args = process.argv.slice(2);
 const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
-const set = JSON.parse(readFileSync(new URL("../eval/eval-set.json", import.meta.url), "utf8"));
+const set = JSON.parse(readFileSync(new URL(`../${flag("set") ?? "eval/eval-set.json"}`, import.meta.url), "utf8"));
 
 function studentConfig() {
   const { STUDENT_BASE_URL, STUDENT_API_KEY, STUDENT_MODEL, STUDENT_VERSION } = process.env;
@@ -37,7 +41,12 @@ function studentConfig() {
   return { label: STUDENT_MODEL, version: STUDENT_VERSION, baseUrl: STUDENT_BASE_URL, apiKeys: [STUDENT_API_KEY ?? "none"], model: STUDENT_MODEL };
 }
 const model = flag("model") === "student" ? studentConfig() : teacherConfig();
-const label = flag("label") ?? `${flag("model") ?? "teacher"}-${model.version ?? model.label.split("/").pop()}`;
+const updatePath = flag("update");
+const previous = updatePath ? JSON.parse(readFileSync(updatePath, "utf8")) : null;
+if (previous && (previous.summary.evalSet !== set.version || previous.summary.model !== model.label)) {
+  throw new Error(`${updatePath} is ${previous.summary.model} on ${previous.summary.evalSet}, not ${model.label} on ${set.version}: check --model, --student-model and --set`);
+}
+const label = previous?.summary.label ?? flag("label") ?? `${flag("model") ?? "teacher"}-${model.version ?? model.label.split("/").pop()}`;
 const only = flag("only")?.split(",");
 const parallel = Number(flag("parallel") ?? 2);
 const useExamples = !args.includes("--no-examples");
@@ -45,7 +54,10 @@ const useExamples = !args.includes("--no-examples");
 const { rows: [topStudent] } = await opsPool().query(
   "with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals) select id::text from u group by id order by count(*) desc limit 1",
 );
-const items = set.items.filter((i) => !only || only.includes(i.id)).slice(0, Number(flag("limit") ?? Infinity));
+// With --update: the --only items, or else every item that errored in that report
+const rerun = new Set(only ?? previous?.results.filter((r) => r.status === "error").map((r) => r.id));
+const items = set.items.filter((i) => (!only && !previous) || rerun.has(i.id)).slice(0, Number(flag("limit") ?? Infinity));
+if (previous) console.log(`rerunning ${items.length} items into ${updatePath}`);
 
 async function score(item) {
   const role = item.role === "admin" ? "nlq_admin" : "nlq_student";
@@ -85,7 +97,7 @@ async function score(item) {
   };
 }
 
-const results = [];
+const results = previous ? previous.results.filter((r) => !items.some((i) => i.id === r.id)) : [];
 let cursor = 0;
 await Promise.all(
   Array.from({ length: Math.min(parallel, items.length) }, async () => {
@@ -124,7 +136,7 @@ const summary = {
 
 const dir = new URL("../eval/reports/", import.meta.url);
 mkdirSync(dir, { recursive: true });
-const file = new URL(`${new Date().toISOString().slice(0, 10)}-${label}.json`, dir);
+const file = previous ? pathToFileURL(resolve(updatePath)) : new URL(`${new Date().toISOString().slice(0, 10)}-${label}.json`, dir);
 writeFileSync(file, JSON.stringify({ summary, results }, null, 2) + "\n");
 
 console.log(`\n=== ${label} on ${set.version} (${results.length} items) ===`);

@@ -3,6 +3,7 @@
 // compared with the current gold. The report is rewritten in place.
 //
 //   npm run eval:rescore -- eval/reports/2026-10-20-teacher-gpt-oss-120b-v3.json
+//   npm run eval:rescore -- <report.json> --set=eval/test-set.json     a report on the test set
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,9 @@ process.loadEnvFile(fileURLToPath(new URL("../.env.local", import.meta.url)));
 const path = process.argv.slice(2).find((a) => !a.startsWith("--"));
 if (!path) throw new Error("Usage: npm run eval:rescore -- <report.json>");
 const report = JSON.parse(readFileSync(path, "utf8"));
-const set = JSON.parse(readFileSync(new URL("../eval/eval-set.json", import.meta.url), "utf8"));
+const setPath = process.argv.find((a) => a.startsWith("--set="))?.slice(6) ?? "eval/eval-set.json";
+const set = JSON.parse(readFileSync(new URL(`../${setPath}`, import.meta.url), "utf8"));
+if (report.summary.evalSet !== set.version) throw new Error(`Report is on ${report.summary.evalSet}, not ${set.version}: pass --set`);
 const { rows: [topStudent] } = await opsPool().query(
   "with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals) select id::text from u group by id order by count(*) desc limit 1",
 );

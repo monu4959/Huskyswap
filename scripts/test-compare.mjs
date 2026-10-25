@@ -23,6 +23,15 @@ const CASES = [
   ["missing gold column", false, r(["a", "n"], [["x", "1"]]), r(["a"], [["x"]])],
   ["rows mixed up across columns", false, r(["a", "n"], [["x", "1"], ["y", "2"]]), r(["a", "n"], [["x", "2"], ["y", "1"]])],
   ["row count differs", false, r(["n"], [["1"], ["2"]]), r(["n"], [["1"]])],
+  ["first-of-month date vs month name, one year", true, r(["month"], [["2025-05-01"]]), r(["month_name"], [["May      "]])],
+  ["first-of-month dates vs month numbers, ordered", true, r(["m", "n"], [["2025-01-01", "4"], ["2025-02-01", "6"]]), r(["year", "month", "n"], [["2025", "1", "4"], ["2025", "2", "6"]]), true],
+  ["month name for dates in two years", false, r(["m"], [["2024-05-01"], ["2025-05-01"]]), r(["m"], [["May"], ["May"]])],
+  ["wrong month name", false, r(["month"], [["2025-05-01"]]), r(["month_name"], [["June"]])],
+  ["month number vs a count column", false, r(["n"], [["3"], ["5"]]), r(["month"], [["4"], ["5"]])],
+  ["groups in rows vs one row of columns", true, r(["is_weekend", "rate"], [["false", "0.1963"], ["true", "0.1909"]]), r(["weekend_pct", "weekday_pct", "n"], [["19.09", "19.63", "2400"]])],
+  ["one row missing a group's value", false, r(["type", "avg"], [["rental", "11.74"], ["sale", "64.73"]]), r(["avg_sale"], [["64.73"]])],
+  ["one row with a wrong value", false, r(["type", "avg"], [["rental", "11.74"], ["sale", "64.73"]]), r(["avg_sale", "avg_rental"], [["64.73", "12.10"]])],
+  ["two value columns in rows aren't pivoted", false, r(["type", "n", "avg"], [["rental", "5", "11.74"], ["sale", "9", "64.73"]]), r(["a", "b", "c", "d"], [["5", "11.74", "9", "64.73"]])],
 ];
 
 let failures = 0;

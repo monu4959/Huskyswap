@@ -41,6 +41,12 @@ const PARALLEL = Number(flag("parallel", 6));
 const LIMIT = Number(flag("limit", Infinity));
 const SEED = Number(flag("seed", 1));
 const TOO_CLOSE_TO_EVAL = 0.92;
+// Every eval question (the pilot and the held-out test set): none may leak into training data
+const evalQuestions = () =>
+  ["eval-set.json", "test-set.json"]
+    .map((f) => new URL(`../eval/${f}`, import.meta.url))
+    .filter((u) => existsSync(u))
+    .flatMap((u) => JSON.parse(readFileSync(u, "utf8")).items.map((i) => i.question));
 
 const OUT = new URL("../ml/datasets/", import.meta.url);
 const WORK = new URL("work/", OUT);
@@ -96,8 +102,7 @@ async function fill() {
      select u.id::text from u join public.profiles p on p.id = u.id where p.role = 'student' and p.account_status = 'active'
      group by u.id order by count(*) desc limit 10`,
   );
-  const evalSet = JSON.parse(readFileSync(new URL("../eval/eval-set.json", import.meta.url), "utf8"));
-  const evalVecs = await embed(evalSet.items.map((i) => i.question));
+  const evalVecs = await embed(evalQuestions());
 
   const questions = [];
   for (const t of templates) {
@@ -143,8 +148,7 @@ async function reword() {
   const done = new Set(readJsonl("variants.jsonl").map((v) => v.parent));
   const todo = questions.filter((q) => !done.has(q.qid));
   console.log(`reword: ${todo.length} questions to rephrase (${VARIANTS} variants each)`);
-  const evalSet = JSON.parse(readFileSync(new URL("../eval/eval-set.json", import.meta.url), "utf8"));
-  const evalVecs = await embed(evalSet.items.map((i) => i.question));
+  const evalVecs = await embed(evalQuestions());
   const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
   const teacher = teacherConfig();
   await pool(todo, async (q) => {

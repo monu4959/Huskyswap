@@ -7,7 +7,10 @@
 //     and a percentage column may match a fraction column (61.6 = 0.616)
 //   * text is compared case-insensitively; category labels match their codes
 //     ("Dorm essentials" = dorm_essentials); a first-of-month date matches its
-//     month ("2025-04-01" = "2025-04")
+//     month ("2025-04-01" = "2025-04"), and, when all the dates fall in one
+//     year, that month's name or number ("April", 4)
+//   * a gold answer of one value per group in rows (weekend 0.19 / weekday 0.20)
+//     matches a single row holding those values in columns
 //   * row order matters only when orderMatters (top-N, "month by month")
 
 import type { SqlResult } from "./types.ts";
@@ -43,13 +46,59 @@ function canon(c: Cell, d: number, factor: number) {
   return `s:${c}`;
 }
 
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const isNumber = (c: Cell) => c !== null && typeof c === "object";
+
+// A column of months (first-of-month dates within one year, month names, or month numbers) as m1..m12
+function asMonths(col: Cell[]) {
+  const years = new Set<string>();
+  const out: string[] = [];
+  for (const c of col) {
+    if (c === null) return null;
+    if (typeof c === "object") {
+      if (!Number.isInteger(c.n) || c.n < 1 || c.n > 12) return null;
+      out.push(`m${c.n}`);
+      continue;
+    }
+    const ym = /^(\d{4})-(\d{2})$/.exec(c);
+    if (ym) years.add(ym[1]);
+    const month = ym ? Number(ym[2]) : MONTHS.indexOf(c) + 1;
+    if (!month) return null;
+    out.push(`m${month}`);
+  }
+  return years.size <= 1 ? out : null;
+}
+
 // The ways a predicted column can stand for a gold column: same scale, or percent vs fraction.
 // Scaling moves the decimal point: a fraction written to 2 places (0.20) is a percentage to 0 (20).
 function pairings(gold: Cell[], pred: Cell[]) {
-  return [1, 100, 0.01].map((factor) => {
+  const ways = [1, 100, 0.01].map((factor) => {
     const predDecimals = Math.max(0, decimals(pred) - Math.round(Math.log10(factor)));
     const d = Math.min(decimals(gold), predDecimals, 4);
     return { d, factor, gold: gold.map((c) => canon(c, d, 1)), pred: pred.map((c) => canon(c, d, factor)) };
+  });
+  // The same months written differently (not two number columns: those must match as numbers)
+  const [gm, pm] = [asMonths(gold), asMonths(pred)];
+  if (gm && pm && !(gold.every(isNumber) && pred.every(isNumber))) ways.push({ d: 0, factor: 1, gold: gm, pred: pm });
+  return ways;
+}
+
+// One value per group, in rows (gold) vs in the columns of a single row (prediction).
+// Only for gold with one value column and at most one label column; labels can't be
+// checked against column names, so every gold value must appear in the row.
+function sameAsOneRow(gold: Ok, pred: Ok) {
+  if (pred.rowCount !== 1 || gold.rowCount < 2) return false;
+  const goldCols = columnsOf(gold);
+  const values = goldCols.filter((col) => col.every((c) => c === null || isNumber(c)));
+  if (values.length !== 1 || goldCols.length > 2) return false;
+  const cells = columnsOf(pred).map((col) => col[0]);
+  return [1, 100, 0.01].some((factor) => {
+    const used = new Set<number>();
+    return values[0].every((g) => {
+      const i = cells.findIndex((p, j) => !used.has(j) && pairings([g], [p]).some((w) => w.factor === factor && w.gold[0] === w.pred[0]));
+      if (i >= 0) used.add(i);
+      return i >= 0;
+    });
   });
 }
 
@@ -69,7 +118,10 @@ export function projectColumns(result: Ok, columns?: string[]): Ok {
 
 export function compareResults(gold: Ok, pred: Ok, orderMatters = false): Comparison {
   if (gold.truncated || pred.truncated) return { match: false, reason: "result over 200 rows (truncated)" };
-  if (gold.rowCount !== pred.rowCount) return { match: false, reason: `row count ${pred.rowCount}, expected ${gold.rowCount}` };
+  if (gold.rowCount !== pred.rowCount) {
+    if (!orderMatters && sameAsOneRow(gold, pred)) return { match: true, reason: "match (one row, a column per group)" };
+    return { match: false, reason: `row count ${pred.rowCount}, expected ${gold.rowCount}` };
+  }
   if (gold.rowCount === 0) return { match: true, reason: "both empty" };
 
   const goldCols = columnsOf(gold);
