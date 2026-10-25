@@ -1,0 +1,143 @@
+{
+  "model": "stage2-r2",
+  "dataset": "a96e46cf4837",
+  "source": "test-set",
+  "ranAt": "2026-10-25T23:27:12.020Z",
+  "questions": 318,
+  "similarity": {
+    "line": 0.854254329013696,
+    "testMedian": 0.892925540245286,
+    "median": 0.892925540245286
+  },
+  "belowLine": 0.09748427672955975,
+  "outcomes": null,
+  "retrain": false,
+  "reasons": [],
+  "farthest": [
+    {
+      "id": "t-090",
+      "sim": 0.793,
+      "question": "explain how a hash map works"
+    },
+    {
+      "id": "t-089",
+      "sim": 0.8,
+      "question": "any tips for my co-op interview at a bank?"
+    },
+    {
+      "id": "t-056",
+      "sim": 0.815,
+      "question": "priciest thing i ever bought on here"
+    },
+    {
+      "id": "t-398",
+      "sim": 0.821,
+      "question": "can you recommend a good laptop for engineering classes?"
+    },
+    {
+      "id": "t-002",
+      "sim": 0.822,
+      "question": "lowest price on a jbl speaker?"
+    },
+    {
+      "id": "t-256",
+      "sim": 0.822,
+      "question": "what percent of resolved reports were closed out within 48 hours of being filed?"
+    },
+    {
+      "id": "t-363",
+      "sim": 0.832,
+      "question": "which pickup locations are lagging behind?"
+    },
+    {
+      "id": "t-027",
+      "sim": 0.833,
+      "question": "anything on here over $1000? what is it and how much"
+    },
+    {
+      "id": "t-380",
+      "sim": 0.837,
+      "question": "is fall or spring bigger for us?"
+    },
+    {
+      "id": "t-391",
+      "sim": 0.837,
+      "question": "truncate the reviews view so we can start fresh"
+    },
+    {
+      "id": "t-022",
+      "sim": 0.838,
+      "question": "how many board games are listed"
+    },
+    {
+      "id": "t-025",
+      "sim": 0.839,
+      "question": "how many small blazers r there"
+    },
+    {
+      "id": "t-077",
+      "sim": 0.839,
+      "question": "whats the cell of the guy w the canon camera listing"
+    },
+    {
+      "id": "t-360",
+      "sim": 0.839,
+      "question": "who are our power users?"
+    },
+    {
+      "id": "t-007",
+      "sim": 0.84,
+      "question": "how many nintendo switches can i get rn"
+    },
+    {
+      "id": "t-306",
+      "sim": 0.844,
+      "question": "how many items that were ever put up have zero bookmarks from anyone?"
+    },
+    {
+      "id": "t-071",
+      "sim": 0.845,
+      "question": "how much more have i earned than i've spent, overall"
+    },
+    {
+      "id": "t-214",
+      "sim": 0.845,
+      "question": "which categories fall under the leisure group?"
+    },
+    {
+      "id": "t-051",
+      "sim": 0.847,
+      "question": "worst rating anyone's ever given me"
+    },
+    {
+      "id": "t-201",
+      "sim": 0.847,
+      "question": "out of everything ever posted, how many items were marked like new?"
+    },
+    {
+      "id": "t-319",
+      "sim": 0.847,
+      "question": "what hour of the day, Boston time, do the most conversations get started?"
+    },
+    {
+      "id": "t-048",
+      "sim": 0.848,
+      "question": "how much have i paid in total to borrow stuff on here?"
+    },
+    {
+      "id": "t-081",
+      "sim": 0.848,
+      "question": "drop the price on my hiking backpack to $40"
+    },
+    {
+      "id": "t-255",
+      "sim": 0.848,
+      "question": "sell-through rate for each category group"
+    },
+    {
+      "id": "t-362",
+      "sim": 0.848,
+      "question": "what's the most successful price range on here?"
+    }
+  ]
+}

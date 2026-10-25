@@ -7,12 +7,16 @@
 // user's answers, sent back with the original question.
 //
 // The signed-in student's role decides what the agent can query, and their id
-// scopes the my_* views (see src/lib/agent/auth.ts). Every question is logged
-// in ops.agent_runs.
+// scopes the my_* views (see src/lib/agent/auth.ts). The model comes from the
+// registry (src/lib/agent/serving.ts): production, a canary candidate, or the
+// teacher when the student's server is down. Every question is logged in
+// ops.agent_runs.
 
 import { askerFrom } from "@/lib/agent/auth";
 import { runAgent, type GraphEvent } from "@/lib/agent/graph";
+import type { ModelConfig } from "@/lib/agent/llm";
 import { recentAppRuns } from "@/lib/agent/log";
+import { fallback, markDown, route } from "@/lib/agent/serving";
 import type { AgentRun, Clarification, ClarificationTurn } from "@/lib/agent/types";
 
 // The free teacher tier rate-limits per minute, so one question can take a while
@@ -88,14 +92,15 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: AskNode | AskDone) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
-      const run = await runAgent({
-        question,
-        clarifications,
-        role: asker.role,
-        source: "app",
-        userId: asker.userId,
-        onEvent: (e) => send({ type: "node", ...e }),
-      });
+      const ask = (model: ModelConfig) =>
+        runAgent({ question, clarifications, role: asker.role, source: "app", userId: asker.userId, model, onEvent: (e) => send({ type: "node", ...e }) });
+      const chosen = await route(asker.userId).catch((e) => fallback(`routing failed: ${e.message}`));
+      let run = await ask(chosen.model);
+      // The student's server went down mid-run: answer with the teacher instead
+      if (run.status === "error" && chosen.arm !== "fallback") {
+        markDown(chosen.model);
+        run = await ask(fallback(`${chosen.modelId} failed: ${run.error}`).model);
+      }
       send(doneEvent(run));
       controller.close();
     },

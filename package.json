@@ -21,7 +21,12 @@
     "eval:verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval-verify.mjs",
     "eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval.mjs",
     "eval:rescore": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/eval-rescore.mjs",
-    "datagen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/datagen.mjs"
+    "datagen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/datagen.mjs",
+    "registry": "node scripts/registry.mjs",
+    "gate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gate.mjs",
+    "test:serving": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-serving.mjs",
+    "canary:check": "node scripts/canary-check.mjs",
+    "drift": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/drift.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",

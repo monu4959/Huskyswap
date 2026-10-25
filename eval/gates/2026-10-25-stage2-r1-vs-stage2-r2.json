@@ -1,0 +1,53 @@
+{
+  "candidate": "stage2-r1",
+  "baseline": "stage2-r2",
+  "evalSet": "eval-v1-pilot",
+  "ranAt": "2026-10-25T23:18:21.651Z",
+  "runs": "existing reports",
+  "passed": false,
+  "checks": [
+    {
+      "name": "no errors",
+      "passed": true,
+      "detail": "0 errored item(s) across 4 run(s)"
+    },
+    {
+      "name": "overall",
+      "passed": true,
+      "detail": "87.5% vs production 89.3% (margin 3)"
+    },
+    {
+      "name": "SQL",
+      "passed": true,
+      "detail": "execution accuracy 91.9% vs production 86.7% (margin 5)"
+    },
+    {
+      "name": "refusals",
+      "passed": true,
+      "detail": "keeps all 6 that production gets right"
+    },
+    {
+      "name": "clarifications",
+      "passed": false,
+      "detail": "production gets ev-047, ev-048, ev-050 right, the candidate doesn't"
+    },
+    {
+      "name": "tokens",
+      "passed": true,
+      "detail": "3584 tokens per question vs production 3609 (limit 1.5x)"
+    }
+  ],
+  "reports": {
+    "candidate": [
+      "2026-10-24-student-stage2-r1-run1.json",
+      "2026-10-24-student-stage2-r1-run2.json",
+      "2026-10-24-student-stage2-r1-run3.json",
+      "2026-10-25-student-stage2-r1-recheck.json"
+    ],
+    "baseline": [
+      "2026-10-25-student-stage2-r2-run1.json",
+      "2026-10-25-student-stage2-r2-run2.json",
+      "2026-10-25-student-stage2-r2-run3.json"
+    ]
+  }
+}

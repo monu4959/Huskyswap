@@ -1,0 +1,54 @@
+# Nightly production monitor. A failed run (GitHub emails the repo owner) means:
+#
+#   canary   the canary model is doing worse than production on real questions;
+#            it has been switched off (ops.serving_kills). Roll back the registry:
+#            npm run registry -- rollback --reason="..."
+#   drift    students are asking new kinds of questions, or runs are failing:
+#            the drift report (an artifact of the run) lists the farthest ones
+#            for the next round of training data
+#
+# Needs the DATABASE_URL secret (Settings -> Secrets and variables -> Actions);
+# without it the jobs are skipped.
+
+name: monitor
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # 5 am Boston (EDT)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      HAS_DB: ${{ secrets.DATABASE_URL != '' }}
+    steps:
+      - if: env.HAS_DB != 'true'
+        run: echo "::notice::DATABASE_URL secret not set; skipping the monitor"
+      - if: env.HAS_DB == 'true'
+        uses: actions/checkout@v4
+      - if: env.HAS_DB == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - if: env.HAS_DB == 'true'
+        run: npm ci
+      - if: env.HAS_DB == 'true'
+        run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env.local
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - if: env.HAS_DB == 'true'
+        id: canary
+        run: npm run canary:check -- --apply
+      - if: env.HAS_DB == 'true' && !cancelled()
+        run: npm run drift
+      - if: env.HAS_DB == 'true' && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: eval/drift/
+          if-no-files-found: ignore

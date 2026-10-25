@@ -1,0 +1,75 @@
+{
+  "model": "stage2-r2",
+  "dataset": "a96e46cf4837",
+  "source": "app-7d",
+  "ranAt": "2026-10-25T23:29:30.646Z",
+  "questions": 12,
+  "similarity": {
+    "line": 0.854254329013696,
+    "testMedian": 0.892925540245286,
+    "median": 0.922833043853511
+  },
+  "belowLine": 0,
+  "outcomes": {
+    "runs": 12,
+    "error": 0,
+    "gaveUp": 1,
+    "refused": 0,
+    "clarify": 1,
+    "ratings": 0,
+    "thumbsDown": 0,
+    "olderSchema": 0
+  },
+  "retrain": false,
+  "reasons": [],
+  "farthest": [
+    {
+      "id": "3e3a22ad-0543-489d-bc03-bb72bb792cf5",
+      "sim": 0.885
+    },
+    {
+      "id": "0064f489-afa5-40b9-80d4-71dcb164943e",
+      "sim": 0.903
+    },
+    {
+      "id": "cb7e4954-8223-4f60-a013-549e11b7ed33",
+      "sim": 0.903
+    },
+    {
+      "id": "70a2f50d-cf92-47ab-acca-445cb29ed3ca",
+      "sim": 0.903
+    },
+    {
+      "id": "3f43ab70-2339-4711-956b-d9e924f1c26f",
+      "sim": 0.903
+    },
+    {
+      "id": "7a4cb004-7f84-4835-85cd-8657fdc342bc",
+      "sim": 0.903
+    },
+    {
+      "id": "5040d014-7eef-47a0-987a-449992fea1d6",
+      "sim": 0.923
+    },
+    {
+      "id": "456ed4bb-bfd7-4f0b-82a3-1e1b69d8f541",
+      "sim": 0.923
+    },
+    {
+      "id": "4f860a55-f2cf-4d93-a04e-761f30b8ad23",
+      "sim": 0.923
+    },
+    {
+      "id": "ea888eca-da63-44c6-bad2-b6dff18e6fef",
+      "sim": 0.938
+    },
+    {
+      "id": "5a0b1358-11f8-46b9-94be-54043945bba2",
+      "sim": 0.938
+    },
+    {
+      "id": "77bc5bc4-5a9f-4155-8208-3de51032f9ae",
+      "sim": 0.975
+    }
+  ]
+}

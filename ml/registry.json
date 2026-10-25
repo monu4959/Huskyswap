@@ -1,0 +1,139 @@
+{
+  "$comment": "Model registry. Scores aren't stored here: npm run registry computes them from the eval reports listed under each model, and npm run registry -- check verifies every reference. Change serving with npm run registry -- promote / canary / rollback, not by hand.",
+  "serving": {
+    "production": "stage2-r2",
+    "candidate": null,
+    "canaryPercent": 0,
+    "fallback": "teacher-v4"
+  },
+  "models": [
+    {
+      "id": "teacher-v4",
+      "kind": "teacher",
+      "served": "openai/gpt-oss-120b",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "fallback",
+      "notes": "Self-hosted on a Colab G4 (vLLM), or Groq. Generated the training data.",
+      "evals": {
+        "dev": [
+          "2026-10-23-teacher-selfhosted-v4-run1.json",
+          "2026-10-23-teacher-selfhosted-v4-run2.json",
+          "2026-10-23-teacher-selfhosted-v4-run3.json"
+        ],
+        "test": "2026-10-25-test-teacher-selfhosted-v4.json"
+      }
+    },
+    {
+      "id": "base",
+      "kind": "student",
+      "served": "Qwen/Qwen3-4B-Instruct-2507",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "baseline",
+      "notes": "Untrained student, for comparison.",
+      "evals": {
+        "dev": [
+          "2026-10-23-student-qwen3-4b-base-run1.json",
+          "2026-10-23-student-qwen3-4b-base-run2.json",
+          "2026-10-23-student-qwen3-4b-base-run3.json"
+        ],
+        "test": "2026-10-25-test-student-qwen3-4b-base.json"
+      }
+    },
+    {
+      "id": "stage1-r1",
+      "kind": "student",
+      "served": "huskyswap-student-stage1-r1",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "retired",
+      "notes": "Ablation: question-SQL pairs only, no tool-calling traces.",
+      "training": {
+        "commit": "dbd887b",
+        "base": "Qwen/Qwen3-4B-Instruct-2507",
+        "adapter": "MyDrive/huskyswap/adapters/stage1-r1",
+        "method": "LoRA rank 32, 2 epochs, lr 2e-4, seed 7",
+        "data": {
+          "stage1Examples": 1718
+        }
+      },
+      "evals": {
+        "dev": [
+          "2026-10-24-student-stage1-r1-run1.json",
+          "2026-10-24-student-stage1-r1-run2.json",
+          "2026-10-24-student-stage1-r1-run3.json"
+        ],
+        "test": null
+      }
+    },
+    {
+      "id": "stage2-r1",
+      "kind": "student",
+      "served": "huskyswap-student-stage2-r1",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "retired",
+      "notes": "Stage 1 + 2. Clarifies on only 10% of ambiguous test questions (45 clarify examples, repeated 5x).",
+      "training": {
+        "commit": "dbd887b",
+        "base": "Qwen/Qwen3-4B-Instruct-2507",
+        "adapter": "MyDrive/huskyswap/adapters/stage2-r1",
+        "method": "LoRA rank 32; stage 1: 2 epochs, lr 2e-4; stage 2: 2 epochs, lr 1e-4, 15% stage-1 mix; seed 7; clarify examples repeated 5x",
+        "data": {
+          "stage1Examples": 1718,
+          "stage2Examples": 4451
+        }
+      },
+      "evals": {
+        "dev": [
+          "2026-10-24-student-stage2-r1-run1.json",
+          "2026-10-24-student-stage2-r1-run2.json",
+          "2026-10-24-student-stage2-r1-run3.json",
+          "2026-10-25-student-stage2-r1-recheck.json"
+        ],
+        "test": "2026-10-25-test-student-stage2-r1.json"
+      }
+    },
+    {
+      "id": "stage2-r2",
+      "kind": "student",
+      "served": "huskyswap-student-stage2-r2",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "production",
+      "notes": "Run 2: 689 clarify examples (was 45).",
+      "training": {
+        "commit": "51708ef",
+        "base": "Qwen/Qwen3-4B-Instruct-2507",
+        "adapter": "MyDrive/huskyswap/adapters/stage2-r2",
+        "method": "LoRA rank 32; stage 1: 2 epochs, lr 2e-4; stage 2: 2 epochs, lr 1e-4, 15% stage-1 mix; seed 7",
+        "data": {
+          "stage1Examples": 1718,
+          "stage2Examples": 5095,
+          "stage1Sha256": "7dba6391c9291c0018808b227e2baa124ed40580a78a7fc784eb16225ed2f48c",
+          "stage2Sha256": "a96e46cf483785a3cefabd50a191bf7a6299a07a33442a7d61ef6d1d35398491"
+        }
+      },
+      "evals": {
+        "dev": [
+          "2026-10-25-student-stage2-r2-run1.json",
+          "2026-10-25-student-stage2-r2-run2.json",
+          "2026-10-25-student-stage2-r2-run3.json"
+        ],
+        "test": "2026-10-25-test-student-stage2-r2.json"
+      }
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-10-25",
+      "action": "promote",
+      "model": "stage2-r2",
+      "from": "stage2-r1",
+      "gate": null,
+      "gateWaived": "the eval gate didn't exist yet",
+      "reason": "Held-out test set: overall 76.7% vs 66.4%, clarifies 90% vs 10%. Promoted before the eval gate existed."
+    }
+  ]
+}

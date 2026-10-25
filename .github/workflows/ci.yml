@@ -1,0 +1,65 @@
+# Checks on every push and pull request.
+#
+#   checks      lint, types, comparator unit tests, and the model registry: every
+#               report it cites exists and matches, and every promotion or canary
+#               has a passing eval gate (npm run gate) committed with it
+#   db-checks   agent guard tests and eval-set verification against the database.
+#               Runs only when the repository has the DATABASE_URL and
+#               NLQ_DATABASE_URL secrets (Settings -> Secrets and variables -> Actions)
+#
+# The eval gate itself needs a GPU-served model, so it runs where the model is
+# (npm run gate, with the Colab server up) and CI checks its committed result.
+
+name: ci
+
+on:
+  push:
+    branches: [main, text-to-sql-agent]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run test:compare
+      - run: npm run registry -- check
+
+  db-checks:
+    runs-on: ubuntu-latest
+    env:
+      HAS_DB: ${{ secrets.DATABASE_URL != '' && secrets.NLQ_DATABASE_URL != '' }}
+    steps:
+      - if: env.HAS_DB != 'true'
+        run: echo "::notice::DATABASE_URL / NLQ_DATABASE_URL secrets not set; skipping database checks"
+      - if: env.HAS_DB == 'true'
+        uses: actions/checkout@v4
+      - if: env.HAS_DB == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - if: env.HAS_DB == 'true'
+        run: npm ci
+      # The scripts read .env.local, as they do locally
+      - if: env.HAS_DB == 'true'
+        run: printf 'DATABASE_URL=%s\nNLQ_DATABASE_URL=%s\n' "$DATABASE_URL" "$NLQ_DATABASE_URL" > .env.local
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NLQ_DATABASE_URL: ${{ secrets.NLQ_DATABASE_URL }}
+      - if: env.HAS_DB == 'true'
+        run: npm run test:agent-guard
+      - if: env.HAS_DB == 'true'
+        run: npm run eval:verify -- --skip-contamination
+      - if: env.HAS_DB == 'true'
+        run: npm run eval:verify -- --set=eval/test-set.json --skip-contamination
