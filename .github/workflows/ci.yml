@@ -31,6 +31,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npx next typegen # PageProps / LayoutProps: generated, not in git
       - run: npx tsc --noEmit
       - run: npm run test:compare
       - run: npm run registry -- check
