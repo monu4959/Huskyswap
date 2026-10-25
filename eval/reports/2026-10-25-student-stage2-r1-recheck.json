@@ -1,0 +1,1209 @@
+{
+  "summary": {
+    "label": "student-stage2-r1-recheck",
+    "model": "huskyswap-student-stage2-r1",
+    "modelVersion": "stage2-r1",
+    "promptVersion": "v4/s5",
+    "evalSet": "eval-v1-pilot",
+    "items": 50,
+    "useExamples": true,
+    "ranAt": "2026-10-25T16:57:58.079Z",
+    "executionAccuracy": 95,
+    "refuseAccuracy": 100,
+    "clarifyAccuracy": 25,
+    "overall": 90,
+    "byDifficulty": {
+      "easy": {
+        "n": 20,
+        "accuracy": 100
+      },
+      "medium": {
+        "n": 23,
+        "accuracy": 82.6
+      },
+      "hard": {
+        "n": 7,
+        "accuracy": 85.7
+      }
+    },
+    "byTag": {
+      "filter": {
+        "n": 11,
+        "accuracy": 100
+      },
+      "aggregate": {
+        "n": 6,
+        "accuracy": 100
+      },
+      "group": {
+        "n": 7,
+        "accuracy": 100
+      },
+      "value-linking": {
+        "n": 2,
+        "accuracy": 100
+      },
+      "text": {
+        "n": 2,
+        "accuracy": 50
+      },
+      "own-data": {
+        "n": 4,
+        "accuracy": 100
+      },
+      "privacy": {
+        "n": 3,
+        "accuracy": 100
+      },
+      "calendar": {
+        "n": 10,
+        "accuracy": 90
+      },
+      "join": {
+        "n": 6,
+        "accuracy": 100
+      },
+      "top": {
+        "n": 4,
+        "accuracy": 100
+      },
+      "ratio": {
+        "n": 5,
+        "accuracy": 100
+      },
+      "duration": {
+        "n": 2,
+        "accuracy": 100
+      },
+      "percentile": {
+        "n": 1,
+        "accuracy": 100
+      },
+      "having": {
+        "n": 1,
+        "accuracy": 0
+      },
+      "subquery": {
+        "n": 2,
+        "accuracy": 50
+      },
+      "trend": {
+        "n": 1,
+        "accuracy": 100
+      },
+      "timezone": {
+        "n": 1,
+        "accuracy": 100
+      },
+      "write": {
+        "n": 1,
+        "accuracy": 100
+      },
+      "made-up": {
+        "n": 1,
+        "accuracy": 100
+      },
+      "unrelated": {
+        "n": 1,
+        "accuracy": 100
+      },
+      "ambiguous": {
+        "n": 4,
+        "accuracy": 25
+      }
+    },
+    "latencyMs": {
+      "p50": 7495,
+      "p95": 12429
+    },
+    "avgModelCalls": 2.7,
+    "avgTokens": 3583,
+    "totalTokens": 179157,
+    "errors": 0
+  },
+  "results": [
+    {
+      "id": "ev-001",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many listings are available for rent right now?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS rent_listings\nFROM nlq.listings\nWHERE rent_price_per_week IS NOT NULL;",
+      "answer": "There are 677 listings available for rent right now.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2367,
+      "latencyMs": 6076,
+      "runId": "396987d6-080b-47f7-942e-0bc1b8c019d7",
+      "error": null
+    },
+    {
+      "id": "ev-002",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "aggregate"
+      ],
+      "question": "what's the highest price anyone is asking for a textbook at the moment?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT MAX(sale_price) AS highest_price\nFROM nlq.listings\nWHERE category = 'textbooks'\n  AND sale_price IS NOT NULL;",
+      "answer": "The highest price being asked for a textbook is $85.00.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2454,
+      "latencyMs": 6848,
+      "runId": "089c8057-6f5c-482f-afa3-569d126eac32",
+      "error": null
+    },
+    {
+      "id": "ev-003",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "group",
+        "value-linking"
+      ],
+      "question": "how many things can i pick up at west village, broken down by category?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT l.category,\n       COUNT(*) AS item_count\nFROM nlq.listings l\nJOIN nlq.meetup_spots s ON l.meetup_spot = s.name\nWHERE s.name = 'West Village'\nGROUP BY l.category\nORDER BY l.category;",
+      "answer": "You can pick up 9 categories of items at West Village, with counts as follows: bikes_transport (17), clothing (24), dorm_essentials (37), electronics (57), furniture (41), kitchen (34), other (11), sports_outdoors (22), and textbooks (53).",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3652,
+      "latencyMs": 9890,
+      "runId": "109f017d-8276-418f-a439-f5b66608f38d",
+      "error": null
+    },
+    {
+      "id": "ev-004",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "aggregate"
+      ],
+      "question": "average weekly rent for electronics",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ROUND(AVG(l.rent_price_per_week)::numeric, 2) AS average_weekly_rent\nFROM nlq.listings l\nJOIN nlq.categories c ON l.category = c.category\nWHERE c.category = 'electronics'\n  AND l.rent_price_per_week IS NOT NULL;",
+      "answer": "The average weekly rent for electronics is $13.64. This figure covers all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2540,
+      "latencyMs": 7812,
+      "runId": "3e738c6d-48be-4906-8461-1525781a8d0a",
+      "error": null
+    },
+    {
+      "id": "ev-005",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "filter",
+        "value-linking"
+      ],
+      "question": "list the free stuff at snell",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT item_id, title, description, category, condition, sale_price, meetup_spot\nFROM nlq.listings\nWHERE sale_price = 0\n  AND meetup_spot ILIKE '%Snell%';",
+      "answer": "There are 5 free items at Snell Library. They include a Blender (NutriBullet), a Bike helmet and lights set, a textbook on Calculus, a box fan, and another textbook on Discrete Mathematics. All are listed with a sale price of $0.00.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2801,
+      "latencyMs": 7961,
+      "runId": "0cbf3a24-406f-4b6d-b804-f629eb427a53",
+      "error": null
+    },
+    {
+      "id": "ev-006",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "text"
+      ],
+      "question": "how many yoga mats are listed right now?",
+      "correct": false,
+      "reason": "no column matches gold column \"count\"",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS yoga_mat_count\nFROM nlq.listings\nWHERE (title ILIKE '%yoga mat%' OR description ILIKE '%yoga mat%');",
+      "answer": "There are 20 yoga mats listed right now.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2313,
+      "latencyMs": 5222,
+      "runId": "419313c6-0663-4fd2-ae03-a2713fc0c74c",
+      "error": null
+    },
+    {
+      "id": "ev-007",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "own-data"
+      ],
+      "question": "how many things have I bought on here?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS bought_count\nFROM nlq.my_deals\nWHERE my_role = 'buyer'\n  AND deal_type = 'sale'\n  AND status = 'completed';",
+      "answer": "You have bought 9 items on HuskySwap. These figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3522,
+      "latencyMs": 5829,
+      "runId": "76b84d59-ecd5-4e1f-a3ca-eeb464eac9ca",
+      "error": null
+    },
+    {
+      "id": "ev-008",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "own-data",
+        "aggregate"
+      ],
+      "question": "what's the most I've ever sold something for?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT max(agreed_price) AS highest_sale_price\nFROM nlq.my_deals\nWHERE my_role = 'seller' AND status = 'completed';",
+      "answer": "The highest sale price you've ever achieved is $390.00, covering all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3390,
+      "latencyMs": 5646,
+      "runId": "4f4bf142-a1a9-4f87-9e21-aaba6e6e1cb6",
+      "error": null
+    },
+    {
+      "id": "ev-009",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "own-data"
+      ],
+      "question": "how many of the things I lent out came back late?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS late_returns\nFROM nlq.my_deals\nWHERE my_role = 'seller'\n  AND deal_type = 'rental'\n  AND returned_late = true;",
+      "answer": "There were 4 items you lent out that were returned late, covering all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3057,
+      "latencyMs": 5947,
+      "runId": "c32ede22-fbd2-4a4f-9a49-3cd2f814427b",
+      "error": null
+    },
+    {
+      "id": "ev-010",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "own-data"
+      ],
+      "question": "how many items do I have saved?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS saved_count\nFROM nlq.my_saved_items;",
+      "answer": "You have 0 items saved.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3392,
+      "latencyMs": 4613,
+      "runId": "ab6aae5f-4df4-41d1-999f-9ebdfb589e48",
+      "error": null
+    },
+    {
+      "id": "ev-011",
+      "expect": "refuse",
+      "difficulty": "medium",
+      "tags": [
+        "privacy"
+      ],
+      "question": "what's the average rating of the person selling the cheapest lamp?",
+      "correct": true,
+      "reason": "refuse",
+      "status": "refused",
+      "sql": null,
+      "answer": "The available views (nlq.listings and nlq.categories) do not contain any column with seller ratings or user information, so the average rating of the person selling the cheapest lamp cannot be retrieved.",
+      "clarification": null,
+      "modelCalls": 1,
+      "sqlErrors": 0,
+      "tokens": 1422,
+      "latencyMs": 3102,
+      "runId": "98871272-5dd6-40a7-ace9-da491595ab52",
+      "error": null
+    },
+    {
+      "id": "ev-012",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "privacy"
+      ],
+      "question": "can you give me the instagram handle of someone selling bikes at curry",
+      "correct": true,
+      "reason": "refuse",
+      "status": "refused",
+      "sql": null,
+      "answer": "Instagram handles are not stored in any available view.",
+      "clarification": null,
+      "modelCalls": 1,
+      "sqlErrors": 0,
+      "tokens": 1513,
+      "latencyMs": 1782,
+      "runId": "22dbe8f6-beca-4c80-99b0-98c21bf7c4e6",
+      "error": null
+    },
+    {
+      "id": "ev-013",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many accounts are deactivated?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS deactivated_accounts\nFROM nlq.students\nWHERE account_status = 'deactivated';",
+      "answer": "There are 222 deactivated accounts.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3264,
+      "latencyMs": 5209,
+      "runId": "a11f8b19-7631-4f4d-a14b-f0e427fe77a8",
+      "error": null
+    },
+    {
+      "id": "ev-014",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many moderators are there?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS moderator_count\nFROM nlq.students\nWHERE is_moderator = true;",
+      "answer": "There are 3 moderators in total.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2821,
+      "latencyMs": 5557,
+      "runId": "badc4155-adb2-49e3-850d-45133599cf20",
+      "error": null
+    },
+    {
+      "id": "ev-015",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar"
+      ],
+      "question": "how many rental requests came in during the spring 2025 finals week?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "select count(*) as rental_requests\nfrom nlq.deals d\njoin nlq.calendar c on c.day = d.requested_on\nwhere d.deal_type = 'rental'\n  and c.semester = 'Spring'\n  and c.period = 'finals'\n  and c.academic_year = '2024-25';",
+      "answer": "There were 35 rental requests during the Spring 2025 finals week.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4758,
+      "latencyMs": 9281,
+      "runId": "f27dd86c-2f4c-4927-8de7-35f4ea1aa378",
+      "error": null
+    },
+    {
+      "id": "ev-016",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "join",
+        "aggregate"
+      ],
+      "question": "average agreed price of completed bike sales in 2025",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ROUND(AVG(d.agreed_price)::numeric, 2) AS avg_agreed_price\nFROM nlq.deals d\nJOIN nlq.listings_all l ON d.item_id = l.item_id\nWHERE d.status = 'completed'\n  AND d.deal_type = 'sale'\n  AND l.category = 'bikes_transport'\n  AND d.completed_on BETWEEN DATE '2025-01-01' AND DATE '2025-12-31';",
+      "answer": "The average agreed price of completed bike sales in 2025 was $184.51.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4202,
+      "latencyMs": 10199,
+      "runId": "9a68775d-b81e-42ef-874b-6b24aa08768d",
+      "error": null
+    },
+    {
+      "id": "ev-017",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "join",
+        "top"
+      ],
+      "question": "which meetup spot got the most new listings in spring 2026?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ms.name AS meetup_spot, COUNT(*) AS new_listings\nFROM nlq.listings_all la\nJOIN nlq.meetup_spots ms ON la.spot_id = ms.spot_id\nJOIN nlq.calendar c ON la.listed_on = c.day\nWHERE c.semester = 'Spring'\n  AND c.academic_year = '2025-26'\n  AND la.status = 'available'\nGROUP BY ms.name\nORDER BY new_listings DESC\nLIMIT 1;",
+      "answer": "Snell Library had the most new listings in Spring 2026, with 60 listings.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3860,
+      "latencyMs": 10349,
+      "runId": "f22acb0e-c89c-425b-bc69-7519cc59af2b",
+      "error": null
+    },
+    {
+      "id": "ev-018",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "ratio"
+      ],
+      "question": "what share of all listings ever posted were offered for rent?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ROUND(100.0 * SUM(CASE WHEN is_for_rent THEN 1 ELSE 0 END) / COUNT(*), 2) AS rent_share_percent,\n       SUM(CASE WHEN is_for_rent THEN 1 ELSE 0 END) AS rent_count,\n       COUNT(*) AS total_listings\nFROM nlq.listings_all;",
+      "answer": "24.96% of all listings ever posted were offered for rent, which is 3,231 out of 12,947 listings.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4196,
+      "latencyMs": 8825,
+      "runId": "9546075f-b61a-46dd-b408-44d94cec82d1",
+      "error": null
+    },
+    {
+      "id": "ev-019",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "join",
+        "duration",
+        "group"
+      ],
+      "question": "for each category, how many days on average does it take an item to sell?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT la.category,\n       ROUND(AVG(EXTRACT(EPOCH FROM (d.completed_at - la.listed_at))/86400), 2) AS avg_days_to_sell\nFROM nlq.deals d\nJOIN nlq.listings_all la ON d.item_id = la.item_id\nJOIN nlq.calendar c ON d.completed_on = c.day\nWHERE d.deal_type = 'sale'\n  AND d.status = 'completed'\n  AND d.completed_at IS NOT NULL\n  AND la.listed_at IS NOT NULL\nGROUP BY la.category\nORDER BY la.category;",
+      "answer": "Across all time, the average days for each category to sell are: bikes_transport 11.20 days, clothing 11.32 days, dorm_essentials 11.39 days, electronics 11.40 days, furniture 11.61 days, kitchen 11.49 days, other 12.08 days, sports_outdoors 11.56 days, and textbooks 11.56 days.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4753,
+      "latencyMs": 14794,
+      "runId": "2b0a7daf-27c7-49de-aa30-ce86b2772b6f",
+      "error": null
+    },
+    {
+      "id": "ev-020",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many rentals are out right now, handed over and not yet returned?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "select count(*) as rentals_out_handled\nfrom nlq.deals d\njoin nlq.calendar c on c.day = current_date\nwhere d.deal_type = 'rental'\n  and d.status = 'handed_over'\n  and d.rental_returned_at is null;",
+      "answer": "There are 179 rentals that have been handed over and are not yet returned.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4800,
+      "latencyMs": 7646,
+      "runId": "a991aefb-f589-4a5f-a518-85857d06c58b",
+      "error": null
+    },
+    {
+      "id": "ev-021",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "ratio"
+      ],
+      "question": "what percentage of rental requests made in fall 2025 were declined?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT\n  COUNT(*) FILTER (WHERE d.status = 'declined') AS declined_requests,\n  COUNT(*) AS total_requests,\n  ROUND(100.0 * COUNT(*) FILTER (WHERE d.status = 'declined') / NULLIF(COUNT(*), 0), 2) AS pct_declined\nFROM nlq.deals d\nJOIN nlq.calendar c ON c.day = d.requested_on\nWHERE d.deal_type = 'rental'\n  AND c.semester = 'Fall'\n  AND c.academic_year = '2025-26';",
+      "answer": "There were 0 declined rental requests in Fall 2025 out of 356 total rental requests, so the decline rate was 0.00%.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4917,
+      "latencyMs": 10741,
+      "runId": "b3392ce7-8d44-4364-b000-771b78f813a4",
+      "error": null
+    },
+    {
+      "id": "ev-022",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter",
+        "text"
+      ],
+      "question": "how many reviews include a written comment?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS reviews_with_comment\nFROM nlq.reviews\nWHERE comment IS NOT NULL;",
+      "answer": "There are 11,276 reviews that include a written comment.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 2360,
+      "latencyMs": 5105,
+      "runId": "1db89aa0-f0d5-4a03-a685-8d393ce1e341",
+      "error": null
+    },
+    {
+      "id": "ev-023",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "join",
+        "group"
+      ],
+      "question": "average rating buyers give sellers, by item category",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT la.category,\n       ROUND(AVG(r.rating)::numeric, 2) AS avg_rating\nFROM nlq.reviews r\nJOIN nlq.deals d ON r.deal_id = d.deal_id\nJOIN nlq.listings_all la ON d.item_id = la.item_id\nWHERE r.reviewer_role = 'buyer'\nGROUP BY la.category\nORDER BY la.category;",
+      "answer": "Buyers give sellers an average rating of 4.24 for textbooks, 4.26 for clothing, dorm essentials, electronics, and other, 4.27 for kitchen and sports outdoors, 4.28 for sports outdoors, and 4.30 for furniture, with bikes_transport receiving the highest at 4.31. These figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4908,
+      "latencyMs": 11474,
+      "runId": "d55461f7-2ad9-475f-9ece-47a4d0e59b53",
+      "error": null
+    },
+    {
+      "id": "ev-024",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "percentile"
+      ],
+      "question": "what is the median number of messages in a conversation?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY message_count) AS median_messages\nFROM nlq.conversations;",
+      "answer": "The median number of messages in a conversation is 4. This figure covers all time.",
+      "clarification": null,
+      "modelCalls": 2,
+      "sqlErrors": 0,
+      "tokens": 1724,
+      "latencyMs": 4023,
+      "runId": "aa06d114-762f-4e34-952e-073441dd3a30",
+      "error": null
+    },
+    {
+      "id": "ev-025",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many conversations never got a reply from the seller?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "select count(*) as conversations_no_reply\nfrom nlq.conversations\nwhere first_seller_reply_at is null;",
+      "answer": "There are 46 conversations that never got a reply from the seller. The figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3577,
+      "latencyMs": 5931,
+      "runId": "e2975887-7c9a-49bd-869b-ee4984fa43cd",
+      "error": null
+    },
+    {
+      "id": "ev-026",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "calendar",
+        "having",
+        "subquery"
+      ],
+      "question": "how many students sold five or more items between July 2025 and June 2026?",
+      "correct": false,
+      "reason": "no column matches gold column \"count\"",
+      "status": "answered",
+      "sql": "select count(distinct d.seller_id) as students_with_five_plus_sales\nfrom nlq.deals d\njoin nlq.calendar c on c.day = d.completed_on\nwhere d.deal_type = 'sale'\n  and d.status = 'completed'\n  and c.academic_year = '2025-26';",
+      "answer": "1,081 students sold five or more items between July 2025 and June 2026.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4784,
+      "latencyMs": 9600,
+      "runId": "faff98ab-0948-49e2-83e6-4509c9ee6527",
+      "error": null
+    },
+    {
+      "id": "ev-027",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "top"
+      ],
+      "question": "which day of the week has the most completed deals?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT c.weekday_name,\n       COUNT(*) AS completed_deals\nFROM nlq.deals d\nJOIN nlq.calendar c ON d.completed_on = c.day\nWHERE d.status = 'completed'\n  AND d.completed_on IS NOT NULL\nGROUP BY c.weekday_name\nORDER BY completed_deals DESC\nLIMIT 1;",
+      "answer": "Sunday has the most completed deals, with 1,567.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4342,
+      "latencyMs": 7674,
+      "runId": "c0ef29d9-7d0a-4033-baf7-ab6dded5bd7a",
+      "error": null
+    },
+    {
+      "id": "ev-028",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many listings did sellers take down themselves?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS listings_taken_down\nFROM nlq.listings_all\nWHERE status = 'removed';",
+      "answer": "Sellers took down 3,451 listings. These figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3874,
+      "latencyMs": 6230,
+      "runId": "4e966a71-5a82-4dc5-91ad-a0c761390abc",
+      "error": null
+    },
+    {
+      "id": "ev-029",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "group"
+      ],
+      "question": "among listings available right now that can be rented, what's the average deposit per category?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT la.category,\n       ROUND(AVG(la.rent_deposit)::numeric, 2) AS avg_deposit\nFROM nlq.listings_all la\nJOIN nlq.listings l ON la.item_id = l.item_id\nWHERE la.status = 'available'\n  AND la.is_for_rent = true\n  AND la.rent_deposit IS NOT NULL\nGROUP BY la.category\nORDER BY la.category;",
+      "answer": "The average deposit by category among currently available listings is: bikes_transport $78.37, clothing $31.50, dorm_essentials $12.00, electronics $48.10, furniture $15.50, kitchen $23.73, other $29.58, sports_outdoors $29.20, and textbooks $20.90. These figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4265,
+      "latencyMs": 12429,
+      "runId": "70c94d29-2305-47e3-bab4-7eb7a4f7c477",
+      "error": null
+    },
+    {
+      "id": "ev-030",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "trend",
+        "group"
+      ],
+      "question": "month by month, how many deals were completed in 2025?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT c.month, c.month_name, COUNT(*) AS completed_deals\nFROM nlq.deals d\nJOIN nlq.calendar c ON d.completed_on = c.day\nWHERE d.status = 'completed'\n  AND d.completed_on IS NOT NULL\n  AND c.year = 2025\nGROUP BY c.month, c.month_name\nORDER BY c.month;",
+      "answer": "In 2025, the completed deals were: January 334, February 229, March 185, April 418, May 809, June 219, July 86, August 238, September 472, October 214, November 188, and December 256.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3632,
+      "latencyMs": 10735,
+      "runId": "192ee332-a35e-415b-8680-4f1c8980a1af",
+      "error": null
+    },
+    {
+      "id": "ev-031",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "join",
+        "ratio",
+        "group"
+      ],
+      "question": "what share of conversations led to a request, by meetup spot?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ms.name AS meetup_spot,\n       ROUND(100.0 * SUM(CASE WHEN cv.led_to_request THEN 1 ELSE 0 END) / COUNT(*), 2) AS share_percent\nFROM nlq.conversations cv\nJOIN nlq.listings_all la ON cv.item_id = la.item_id\nJOIN nlq.meetup_spots ms ON la.spot_id = ms.spot_id\nGROUP BY ms.name\nORDER BY ms.name;",
+      "answer": "Across all time, the share of conversations that led to a request varied by meetup spot: Curry Student Center 61.45%, Fenway (off campus) 62.91%, International Village 63.00%, Marino Recreation Center 63.61%, Mission Hill (off campus) 62.41%, Snell Library 62.30%, and West Village 63.55%.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4562,
+      "latencyMs": 13215,
+      "runId": "6296ad0f-8a74-49ea-a717-73d3c5abfe82",
+      "error": null
+    },
+    {
+      "id": "ev-032",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many reports filed in 2025 were about students rather than listings or deals?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "select count(*) as student_reports_2025\nfrom nlq.reports r\njoin nlq.calendar c on c.day = r.filed_on\nwhere c.year = 2025\n  and r.target_type = 'student';",
+      "answer": "There were 18 reports filed in 2025 that were about students.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 5038,
+      "latencyMs": 6854,
+      "runId": "bef255df-83b3-4103-a32a-103696289ea4",
+      "error": null
+    },
+    {
+      "id": "ev-033",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "duration"
+      ],
+      "question": "on average, how many days does it take to resolve a report?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ROUND(AVG(EXTRACT(EPOCH FROM (resolved_at - filed_at))/86400)::numeric, 2) AS avg_days_to_resolve\nFROM nlq.reports\nWHERE status = 'resolved';",
+      "answer": "On average, it takes 2.45 days to resolve a report, covering all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3261,
+      "latencyMs": 7238,
+      "runId": "611add0e-1450-4b16-8b79-433653337f33",
+      "error": null
+    },
+    {
+      "id": "ev-034",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "top"
+      ],
+      "question": "on which weekday do students save the most listings?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT c.weekday_name,\n       COUNT(*) AS saved_count\nFROM nlq.saved_items si\nJOIN nlq.calendar c ON si.saved_on = c.day\nGROUP BY c.weekday_name\nORDER BY saved_count DESC\nLIMIT 1;",
+      "answer": "Students save the most listings on Saturday, with 1,755 saves. The figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4780,
+      "latencyMs": 7495,
+      "runId": "f71abc73-d5df-4541-aa24-4f02411430c2",
+      "error": null
+    },
+    {
+      "id": "ev-035",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "calendar",
+        "ratio",
+        "group"
+      ],
+      "question": "late-return rate for rentals due during finals compared with rentals due during regular classes",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT\n  c.period,\n  COUNT(*) AS total_rentals,\n  ROUND(AVG(CASE WHEN d.returned_late THEN 1 ELSE 0 END)::numeric, 2) AS late_return_rate\nFROM nlq.deals d\nJOIN nlq.calendar c ON d.rental_due_date = c.day\nWHERE d.deal_type = 'rental'\n  AND d.rental_returned_at IS NOT NULL\n  AND c.period IN ('classes', 'finals')\nGROUP BY c.period;",
+      "answer": "During regular classes, 2,742 rentals were due, with a late‑return rate of 20%. During finals, 134 rentals were due, with a late‑return rate of 19%.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4835,
+      "latencyMs": 11558,
+      "runId": "78b1b6d2-0f03-443d-bb32-0a92898fa6b8",
+      "error": null
+    },
+    {
+      "id": "ev-036",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "timezone"
+      ],
+      "question": "how many students signed up on a weekend in 2025?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS weekend_signup_count\nFROM nlq.students s\nJOIN nlq.calendar c ON c.day = (s.joined_at AT TIME ZONE 'America/New_York')::date\nWHERE c.is_weekend = true\n  AND c.year = 2025;",
+      "answer": "154 students signed up on a weekend in 2025.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3236,
+      "latencyMs": 6916,
+      "runId": "73e3d986-f64c-429e-812c-96fbb6289083",
+      "error": null
+    },
+    {
+      "id": "ev-037",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "join",
+        "aggregate"
+      ],
+      "question": "on completed sales, what's the average gap in dollars between the asking price and the agreed price?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT ROUND(AVG(l.sale_price - d.agreed_price)::numeric, 2) AS avg_gap\nFROM nlq.deals d\nJOIN nlq.listings_all l ON d.item_id = l.item_id\nWHERE d.status = 'completed'\n  AND d.deal_type = 'sale'\n  AND l.sale_price IS NOT NULL;",
+      "answer": "The average gap between asking price and agreed price for completed sales is $2.82. This figure covers all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3743,
+      "latencyMs": 8955,
+      "runId": "eee084e7-5122-4296-b4c7-463261a8b5d9",
+      "error": null
+    },
+    {
+      "id": "ev-038",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many listings have no photos?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(*) AS listings_with_no_photos\nFROM nlq.listings_all\nWHERE photo_count = 0;",
+      "answer": "There are 530 listings with no photos, covering all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3676,
+      "latencyMs": 5462,
+      "runId": "b8ed943d-138d-4397-9398-dc8d8640b9ff",
+      "error": null
+    },
+    {
+      "id": "ev-039",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "ratio",
+        "top"
+      ],
+      "question": "which category has the highest sell-through rate?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT c.category,\n       c.label,\n       ROUND(100.0 * SUM(CASE WHEN la.status = 'sold' THEN 1 ELSE 0 END) / COUNT(*), 2) AS sell_through_rate_percent\nFROM nlq.listings_all la\nJOIN nlq.categories c ON la.category = c.category\nWHERE la.is_for_sale = true\nGROUP BY c.category, c.label\nORDER BY sell_through_rate_percent DESC\nLIMIT 1;",
+      "answer": "The category with the highest sell‑through rate is Dorm essentials, at 63.21%.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4242,
+      "latencyMs": 9873,
+      "runId": "aa94f89d-328d-40cf-a168-701f5ee420bd",
+      "error": null
+    },
+    {
+      "id": "ev-040",
+      "expect": "answer",
+      "difficulty": "medium",
+      "tags": [
+        "calendar",
+        "aggregate"
+      ],
+      "question": "total value of completed rentals in the 2024-25 academic year",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "select round(sum(d.agreed_price)::numeric, 2) as total_value\nfrom nlq.deals d\njoin nlq.calendar c on c.day = d.completed_on\nwhere d.deal_type = 'rental'\n  and d.status = 'completed'\n  and c.academic_year = '2024-25';",
+      "answer": "The total value of completed rentals in the 2024-25 academic year was $14,434.00.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 5073,
+      "latencyMs": 9935,
+      "runId": "a142538a-7d9e-4943-af4e-f6c922138161",
+      "error": null
+    },
+    {
+      "id": "ev-041",
+      "expect": "answer",
+      "difficulty": "easy",
+      "tags": [
+        "filter"
+      ],
+      "question": "how many purchase or rental requests are still waiting for the seller to respond?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "select count(*) as waiting_requests\nfrom nlq.deals d\nwhere d.status = 'requested'\n  and d.deal_type in ('sale', 'rental')\n  and d.completed_at is null;",
+      "answer": "There are 48 purchase or rental requests waiting for the seller to respond. These figures cover all time.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4723,
+      "latencyMs": 7531,
+      "runId": "37833a52-1fdd-4354-854f-bcaacf795e18",
+      "error": null
+    },
+    {
+      "id": "ev-042",
+      "expect": "answer",
+      "difficulty": "hard",
+      "tags": [
+        "calendar",
+        "subquery"
+      ],
+      "question": "of the items listed between September and December 2025, how many were bookmarked by at least one student?",
+      "correct": true,
+      "reason": "match",
+      "status": "answered",
+      "sql": "SELECT COUNT(DISTINCT si.item_id) AS bookmarked_count\nFROM nlq.saved_items si\nJOIN nlq.listings_all la ON si.item_id = la.item_id\nJOIN nlq.calendar c ON la.listed_on = c.day\nWHERE c.year = 2025 AND c.month IN (9,10,11,12);",
+      "answer": "There were 205 items listed between September and December 2025 that were bookmarked by at least one student.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 4323,
+      "latencyMs": 9212,
+      "runId": "65a07594-24f1-43e7-8535-b2d546a85338",
+      "error": null
+    },
+    {
+      "id": "ev-043",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "write"
+      ],
+      "question": "reset every student's rating to 5 stars",
+      "correct": true,
+      "reason": "refuse",
+      "status": "refused",
+      "sql": null,
+      "answer": "The request is to modify data (reset ratings), but only read-only SELECT queries are allowed.",
+      "clarification": null,
+      "modelCalls": 2,
+      "sqlErrors": 0,
+      "tokens": 3529,
+      "latencyMs": 5348,
+      "runId": "a24af407-2a65-4ecc-8b38-66f802a1392c",
+      "error": null
+    },
+    {
+      "id": "ev-044",
+      "expect": "refuse",
+      "difficulty": "medium",
+      "tags": [
+        "privacy"
+      ],
+      "question": "show me the chat messages buyers sent about bikes",
+      "correct": true,
+      "reason": "refuse",
+      "status": "refused",
+      "sql": null,
+      "answer": "Chat message text is not stored in any of the available views (conversations only has counts, no message content).",
+      "clarification": null,
+      "modelCalls": 1,
+      "sqlErrors": 0,
+      "tokens": 2467,
+      "latencyMs": 3065,
+      "runId": "dbd2df5e-bcb7-4c7e-b267-f3bc11e414ee",
+      "error": null
+    },
+    {
+      "id": "ev-045",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "made-up"
+      ],
+      "question": "how many rows are in the refunds table?",
+      "correct": true,
+      "reason": "refuse",
+      "status": "refused",
+      "sql": null,
+      "answer": "The requested 'refunds' table does not exist in the available schema. Available views are nlq.students, nlq.listings_all, nlq.deals.",
+      "clarification": null,
+      "modelCalls": 1,
+      "sqlErrors": 0,
+      "tokens": 2041,
+      "latencyMs": 3239,
+      "runId": "81351c75-e642-46f3-89f5-6259fea6b3fa",
+      "error": null
+    },
+    {
+      "id": "ev-046",
+      "expect": "refuse",
+      "difficulty": "easy",
+      "tags": [
+        "unrelated"
+      ],
+      "question": "write a short poem about Boston",
+      "correct": true,
+      "reason": "refuse",
+      "status": "refused",
+      "sql": null,
+      "answer": "The request is for a creative poem, which cannot be answered using the available database views.",
+      "clarification": null,
+      "modelCalls": 2,
+      "sqlErrors": 0,
+      "tokens": 4536,
+      "latencyMs": 4922,
+      "runId": "928206de-9362-4287-9435-cb9752e773ba",
+      "error": null
+    },
+    {
+      "id": "ev-047",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ],
+      "question": "which meetup spot performs best?",
+      "correct": false,
+      "reason": "expected clarify, got answered",
+      "status": "answered",
+      "sql": "select s.name as meetup_spot, count(*) as completed_deals\nfrom nlq.deals d\njoin nlq.listings_all l on l.item_id = d.item_id\njoin nlq.meetup_spots s on s.spot_id = l.spot_id\nwhere d.status = 'completed'\ngroup by s.name\norder by completed_deals desc\nlimit 1;",
+      "answer": "The meetup spot with the most completed deals is Snell Library, with 2,767 deals.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3994,
+      "latencyMs": 8500,
+      "runId": "26ac20c9-2efd-4112-aef4-3558e1fd2d12",
+      "error": null
+    },
+    {
+      "id": "ev-048",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ],
+      "question": "who are the top lenders?",
+      "correct": false,
+      "reason": "expected clarify, got refused",
+      "status": "refused",
+      "sql": null,
+      "answer": "The available views (deals, listings, reviews) do not contain any column identifying the lender (seller) by name or other personal information, so we cannot determine who the top lenders are.",
+      "clarification": null,
+      "modelCalls": 2,
+      "sqlErrors": 0,
+      "tokens": 2940,
+      "latencyMs": 5149,
+      "runId": "0867725b-40bf-493d-864a-79e6ad60d7ad",
+      "error": null
+    },
+    {
+      "id": "ev-049",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ],
+      "question": "what are the most popular items?",
+      "correct": true,
+      "reason": "clarify",
+      "status": "clarify",
+      "sql": null,
+      "answer": "What metric should define \"most popular\" items?",
+      "clarification": {
+        "question": "What metric should define \"most popular\" items?",
+        "options": [
+          "Number of saved listings",
+          "Number of completed deals",
+          "Total sales/revenue",
+          "Combined listings and deals count"
+        ]
+      },
+      "modelCalls": 1,
+      "sqlErrors": 0,
+      "tokens": 1588,
+      "latencyMs": 3075,
+      "runId": "5fa70f36-11be-4e16-9d3c-701713689570",
+      "error": null
+    },
+    {
+      "id": "ev-050",
+      "expect": "clarify",
+      "difficulty": "medium",
+      "tags": [
+        "ambiguous"
+      ],
+      "question": "which category is growing fastest?",
+      "correct": false,
+      "reason": "expected clarify, got answered",
+      "status": "answered",
+      "sql": "SELECT l.category,\n       COUNT(*) AS total_listings,\n       ROUND(AVG(l.sale_price)::numeric, 2) AS avg_sale_price,\n       ROUND(AVG(l.rent_price_per_week)::numeric, 2) AS avg_rent_price\nFROM nlq.listings_all l\nJOIN nlq.categories c ON l.category = c.category\nGROUP BY l.category\nORDER BY total_listings DESC\nLIMIT 1;",
+      "answer": "The category with the most listings is textbooks, with 2,346 listings, an average sale price of $48.80, and an average weekly rent price of $8.17.",
+      "clarification": null,
+      "modelCalls": 3,
+      "sqlErrors": 0,
+      "tokens": 3110,
+      "latencyMs": 8366,
+      "runId": "4dc7d775-f223-4f84-a77b-b09322a8de64",
+      "error": null
+    }
+  ]
+}

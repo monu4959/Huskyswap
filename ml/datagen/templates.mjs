@@ -120,4 +120,29 @@ export const TEMPLATES = [
   { id: "c-how-are-we-doing", role: "admin", expect: "clarify", question: "how are we doing this semester?" },
   { id: "c-trending", role: "admin", expect: "clarify", question: "what's trending right now?" },
   { id: "c-reliable-students", role: "admin", expect: "clarify", question: "who are the most reliable students?" },
+
+  // --- Run 2: more questions that need a clarifying question. Each has slots, so it yields
+  // several originals; run 1 had only 45 clarify examples and the student rarely asked.
+  // Rankings with no measure
+  { id: "c2-category-listings-best", role: "admin", expect: "clarify", question: "which {category} listings do the best?" },
+  { id: "c2-top-sellers-spot", role: "admin", expect: "clarify", question: "who are the top sellers at {spot}?" },
+  { id: "c2-best-spot-category", role: "admin", expect: "clarify", question: "what's the best meetup spot for {category}?" },
+  { id: "c2-hottest-category", role: "admin", expect: "clarify", question: "what are the hottest {category} items?" },
+  { id: "c2-rank-categories-year", role: "admin", expect: "clarify", question: "rank the categories for {year}" },
+  { id: "c2-best-weekday-category", role: "admin", expect: "clarify", question: "which day of the week is best for selling {category}?" },
+  { id: "c2-best-sellers-category", role: "admin", expect: "clarify", question: "who are the best {category} sellers?" },
+  { id: "c2-listings-did-best-semester", role: "admin", expect: "clarify", question: "which listings did best in {semester}?" },
+  { id: "c2-biggest-buyer-year", role: "admin", expect: "clarify", question: "who was the biggest buyer in {year}?" },
+  // Activity or performance with no metric
+  { id: "c2-active-students-semester", role: "admin", expect: "clarify", question: "who were the most active students in {semester}?" },
+  { id: "c2-spot-doing", role: "admin", expect: "clarify", question: "how is {spot} doing?" },
+  { id: "c2-most-activity-month-year", role: "admin", expect: "clarify", question: "which month had the most activity in {year}?" },
+  { id: "c2-popular-time-year", role: "admin", expect: "clarify", question: "what was the most popular time to list stuff in {year}?" },
+  { id: "c2-semester-how-went", role: "admin", expect: "clarify", question: "how did {semester} go?" },
+  { id: "c2-campus-compare", role: "admin", expect: "clarify", question: "how do on-campus meetup spots compare with off-campus ones?" },
+  // Rating direction (given by them or about them?)
+  { id: "c2-seller-rating-category", role: "admin", expect: "clarify", question: "what's the average seller rating for {category} deals?" },
+  { id: "c2-lender-rating-spot", role: "admin", expect: "clarify", question: "what's the lender rating for rentals picked up at {spot}?" },
+  { id: "c2-buyer-rating-semester", role: "admin", expect: "clarify", question: "what was the average buyer rating in {semester}?" },
+  { id: "c2-best-renters", role: "admin", expect: "clarify", question: "which students are the best renters?" },
 ];

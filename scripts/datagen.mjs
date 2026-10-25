@@ -81,10 +81,16 @@ const sameResult = (a, b) => compareResults(a, b).match && compareResults(b, a).
 // ---------------------------------------------------------------------------
 // fill
 // ---------------------------------------------------------------------------
+// Fills only templates that have no questions yet, so new templates can be added to an existing
+// dataset. Each template gets its own seeded random sequence (reproducible, independent of order).
 async function fill() {
-  if (readJsonl("questions.jsonl").length) return console.log("fill: already done");
+  const existing = readJsonl("questions.jsonl");
+  const filled = new Set(existing.map((q) => q.template));
+  const templates = TEMPLATES.filter((t) => !filled.has(t.id));
+  if (!templates.length) return console.log("fill: already done");
   let state = SEED;
   const rand = () => ((state = (state * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const seedFor = (id) => [...id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 4294967296, SEED);
   const { rows: students } = await opsPool().query(
     `with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals)
      select u.id::text from u join public.profiles p on p.id = u.id where p.role = 'student' and p.account_status = 'active'
@@ -94,7 +100,8 @@ async function fill() {
   const evalVecs = await embed(evalSet.items.map((i) => i.question));
 
   const questions = [];
-  for (const t of TEMPLATES) {
+  for (const t of templates) {
+    state = seedFor(t.id);
     const slotNames = [...t.question.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
     const seen = new Set();
     for (let k = 0; k < (slotNames.length ? FILLS * 3 : 1) && seen.size < (slotNames.length ? FILLS : 1); k++) {
@@ -114,7 +121,7 @@ async function fill() {
     if (evalVecs.some((e) => cos(vecs[i], e) >= TOO_CLOSE_TO_EVAL)) { dropped++; continue; }
     append("questions.jsonl", q);
   }
-  console.log(`fill: ${questions.length - dropped} original questions from ${TEMPLATES.length} templates (${dropped} dropped: too close to an eval question)`);
+  console.log(`fill: ${questions.length - dropped} new original questions from ${templates.length} new templates (${dropped} dropped: too close to an eval question)`);
 }
 
 // ---------------------------------------------------------------------------
