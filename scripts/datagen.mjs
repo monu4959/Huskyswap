@@ -3,9 +3,15 @@
 //   npm run datagen -- --stage=all [--fills=4] [--variants=4] [--parallel=6] [--limit=N] [--seed=1]
 //   npm run datagen -- --stage=fill | reword | reference | traces | export
 //   npm run datagen -- --stage=traces --max-minutes=8     work in chunks; rerun to continue
+//   npm run datagen -- --stage=explore --rounds=60 [--per-round=8]
 //
 // Stages (each resumable; work files in ml/datasets/work/):
 //   fill       templates (ml/datagen/templates.mjs) -> original questions
+//   explore    the teacher writes new kinds of questions, each round aimed at a few views and a
+//              SQL skill; one is kept only if it is far from every existing training question
+//              (the drift monitor's measure: nearest-neighbor similarity, gte-small) and from
+//              every eval question. Kept questions are originals like the filled ones, so the
+//              later stages check them the same way. --rounds=0 (the default) skips it.
 //   reword     the teacher writes student-style variants of each original
 //   reference  the teacher answers each original 3 times; 2 of 3 agreeing results
 //              set the reference answer (refuse / clarify items expect that behavior)
@@ -27,6 +33,7 @@ import { chat, teacherConfig } from "../src/lib/agent/llm.ts";
 import { closeOpsPool, opsPool } from "../src/lib/agent/ops-db.ts";
 import { PROMPT_VERSION, bostonToday, sqlSystem, sqlUser } from "../src/lib/agent/prompt.ts";
 import { retrieve } from "../src/lib/agent/retrieve.ts";
+import { SCHEMA_CARD } from "../src/lib/agent/schema-card.ts";
 import { SEMANTIC_VERSION } from "../src/lib/agent/semantic-layer.ts";
 import { SQL_TOOLS } from "../src/lib/agent/sql-node.ts";
 import { SLOTS, TEMPLATES } from "../ml/datagen/templates.mjs";
@@ -41,6 +48,11 @@ const PARALLEL = Number(flag("parallel", 6));
 const LIMIT = Number(flag("limit", Infinity));
 const SEED = Number(flag("seed", 1));
 const TOO_CLOSE_TO_EVAL = 0.92;
+const ROUNDS = Number(flag("rounds", 0));
+const PER_ROUND = Number(flag("per-round", 8));
+// explore keeps a question only if its nearest existing training question is below this
+// (a typical test question's nearest training question scores 0.89)
+const NEW_KIND = 0.88;
 // Every eval question (the pilot and the held-out test set): none may leak into training data
 const evalQuestions = () =>
   ["eval-set.json", "test-set.json"]
@@ -127,6 +139,101 @@ async function fill() {
     append("questions.jsonl", q);
   }
   console.log(`fill: ${questions.length - dropped} new original questions from ${templates.length} new templates (${dropped} dropped: too close to an eval question)`);
+}
+
+// ---------------------------------------------------------------------------
+// explore
+// ---------------------------------------------------------------------------
+// SQL skills a round can ask for; each round pairs one with a few views
+const SKILLS = [
+  "a window function (ranking, running totals, lag/lead between periods)",
+  "a ratio or percentage between two counts",
+  "comparing two time periods (this vs last semester, year over year)",
+  "a cohort (students grouped by when they joined or first sold)",
+  "a top-N list with a tie-breaking rule",
+  "a percentile or median",
+  "groups filtered with HAVING",
+  "rows that have no match in another view (never sold, never reviewed)",
+  "durations between two dates (time to first reply, days to sell)",
+  "a breakdown by the academic calendar (semesters, breaks, finals week)",
+  "a combination of three or more views",
+  "a conditional count in one query (count filter / case when)",
+];
+
+const EXPLORE_SYSTEM = (role, today) => `You write new questions that ${role === "admin" ? "a HuskySwap admin" : "a Northeastern student using HuskySwap"} might ask an assistant that answers by querying the views below. HuskySwap is Northeastern University's student marketplace: students buy, sell and rent items to each other for a week and hand them off at campus meetup spots. Today is ${today}.
+
+Rules:
+- every question must be answerable with one read-only SQL query over the views shown, using only their columns
+- each question must have one clear meaning: no question whose answer depends on an unstated choice
+- vary what is asked: different measures, filters, time windows and groupings from each other and from the examples
+- mostly medium and hard questions; write them the way a person would type them, not like SQL
+- never ask for anyone's name, email, messages or other personal details${role === "student" ? "\n- the my_* views hold the asker's own deals, listings, reviews and saved items: questions about them say \"my\" or \"I\"" : ""}
+
+Reply with JSON only: {"questions": ["...", "..."]}`;
+
+const describeView = (v) =>
+  `${v.name}: ${v.description ?? ""}\n${v.columns.map((c) => `  ${c.name} (${c.type})${c.description ? `: ${c.description}` : ""}`).join("\n")}`;
+
+async function explore() {
+  if (!ROUNDS) return console.log("explore: skipped (--rounds=0)");
+  const done = new Set(readJsonl("explore.jsonl").map((r) => r.round));
+  const todo = Array.from({ length: ROUNDS }, (_, r) => r).filter((r) => !done.has(r));
+  if (!todo.length) return console.log(`explore: all ${ROUNDS} rounds done`);
+
+  // Everything the student already trains on, plus every eval question
+  const existing = [...readJsonl("questions.jsonl"), ...readJsonl("variants.jsonl").filter((v) => v.qid)];
+  console.log(`explore: ${todo.length} rounds of ${PER_ROUND}; embedding ${existing.length} training questions...`);
+  const known = await embed(existing.map((q) => q.question));
+  const evalVecs = await embed(evalQuestions());
+  const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+  const nearest = (v, set) => set.reduce((m, e) => Math.max(m, cos(v, e)), -1);
+  const { rows: students } = await opsPool().query(
+    `with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals)
+     select u.id::text from u join public.profiles p on p.id = u.id where p.role = 'student' and p.account_status = 'active'
+     group by u.id order by count(*) desc limit 10`,
+  );
+  const teacher = teacherConfig();
+  let kept = 0;
+
+  await pool(todo, async (r) => {
+    // A seeded focus per round: role, 1-3 views the role can read, one skill
+    let st = [...`explore-${SEED}-${r}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 4294967296, 7);
+    const rand = () => ((st = (st * 1664525 + 1013904223) % 4294967296) / 4294967296);
+    const qRole = rand() < 0.65 ? "admin" : "student";
+    const visible = SCHEMA_CARD.filter((v) => v.roles.includes(qRole === "admin" ? "nlq_admin" : "nlq_student"));
+    const views = [...visible].sort(() => rand() - 0.5).slice(0, 1 + Math.floor(rand() * 3));
+    const skill = SKILLS[Math.floor(rand() * SKILLS.length)];
+    const examples = existing.filter((q) => q.role === qRole).sort(() => rand() - 0.5).slice(0, 15).map((q) => `- ${q.question}`);
+
+    let questions = [];
+    try {
+      const reply = await chat(teacher, [
+        { role: "system", content: EXPLORE_SYSTEM(qRole, config.today) },
+        { role: "user", content: `Views:\n${views.map(describeView).join("\n\n")}\n\nWrite ${PER_ROUND} questions that need ${skill}.\n\nAlready covered; write different kinds of questions than these:\n${examples.join("\n")}` },
+      ], { json: true });
+      questions = (parseJson(reply.content)?.questions ?? []).filter((x) => typeof x === "string" && x.trim().length >= 12 && x.length <= 300).map((x) => x.trim());
+    } catch (e) {
+      console.log(`  round ${r}: failed (${e.message.slice(0, 80)})`);
+      return; // not logged, so a rerun retries it
+    }
+
+    const vecs = await embed(questions);
+    let n = 0;
+    const dropped = { tooCloseToTraining: 0, tooCloseToEval: 0 };
+    for (const [i, text] of questions.entries()) {
+      if (nearest(vecs[i], evalVecs) >= TOO_CLOSE_TO_EVAL) { dropped.tooCloseToEval++; continue; }
+      if (nearest(vecs[i], known) >= NEW_KIND) { dropped.tooCloseToTraining++; continue; }
+      known.push(vecs[i]); // later questions must be new relative to this one too
+      const mine = views.some((v) => v.name.startsWith("my_"));
+      append("questions.jsonl", {
+        qid: `x${r}#${++n}`, template: `x-${r}`, role: qRole, expect: "answer", question: text,
+        userId: mine ? students[r % students.length].id : null, explore: { views: views.map((v) => v.name), skill },
+      });
+    }
+    kept += n;
+    append("explore.jsonl", { round: r, role: qRole, views: views.map((v) => v.name), skill, asked: questions.length, kept: n, ...dropped });
+  });
+  console.log(`explore: kept ${kept} new questions`);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,9 +429,9 @@ async function exportData() {
 const t0 = Date.now();
 const teacher = teacherConfig();
 if (!/trycloudflare|localhost|127\.0\.0\.1/.test(teacher.baseUrl)) console.log(`note: teacher at ${teacher.baseUrl} (rate-limited hosted APIs make this slow)`);
-for (const s of stage === "all" ? ["fill", "reword", "reference", "traces", "export"] : [stage]) {
+for (const s of stage === "all" ? ["fill", "explore", "reword", "reference", "traces", "export"] : [stage]) {
   console.log(`\n== ${s}`);
-  await { fill, reword, reference, traces, export: exportData }[s]();
+  await { fill, explore, reword, reference, traces, export: exportData }[s]();
 }
 console.log(`\ndone in ${Math.round((Date.now() - t0) / 1000)} s`);
 await closePool();

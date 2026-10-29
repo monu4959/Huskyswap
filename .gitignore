@@ -51,3 +51,6 @@ public/items/*-c[0-9]*.webp
 
 # Generated training data (large; published separately)
 /ml/datasets/
+
+# Python bytecode
+__pycache__/
