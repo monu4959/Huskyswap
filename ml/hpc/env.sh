@@ -40,6 +40,27 @@ start_vllm() {
   echo "$name ready after ${waited}s"
 }
 
+# smoke_test MODEL PORT: one tool call, the way the agent makes them; stops the job if the
+# reply has no tool call or leaks <think> tags into the content
+smoke_test() {
+  "$HS/env/vllm/bin/python" - "$1" "$2" << 'PY'
+import json, os, sys, urllib.request
+model, port = sys.argv[1], sys.argv[2]
+body = {"model": model, "max_tokens": 512,
+        "messages": [{"role": "user", "content": "How many listings are there? Use the tool."}],
+        "tools": [{"type": "function", "function": {"name": "run_sql", "description": "Run a SQL query",
+                   "parameters": {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]}}}],
+        "tool_choice": "auto"}
+req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/chat/completions", data=json.dumps(body).encode(),
+                             headers={"content-type": "application/json", "authorization": "Bearer " + os.environ["VLLM_KEY"]})
+msg = json.load(urllib.request.urlopen(req, timeout=300))["choices"][0]["message"]
+calls, content = msg.get("tool_calls") or [], msg.get("content") or ""
+print(f"smoke test {model}: {len(calls)} tool call(s) {json.dumps(calls)[:200]}")
+if not calls or "<think>" in content:
+    sys.exit(f"smoke test failed for {model}: content was {content[:300]!r}")
+PY
+}
+
 stop_vllm() {
   for pid in ${VLLM_PIDS:-}; do kill "$pid" 2> /dev/null || true; done
 }

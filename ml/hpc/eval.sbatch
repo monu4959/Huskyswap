@@ -7,6 +7,7 @@
 #   ADAPTERS="base stage2-r2" REPEATS=1 sbatch ml/hpc/eval.sbatch
 #   MODE=dev sbatch ml/hpc/eval.sbatch                                dev set x3
 #   MODE=gate ADAPTERS=stage2-r3 sbatch ml/hpc/eval.sbatch            eval gate (registry entry needed)
+#   BASE=Qwen/Qwen3-8B ADAPTERS="base stage2-r3-8b" sbatch ml/hpc/eval.sbatch   8B adapters need their base
 #
 #SBATCH --job-name=hs-eval
 #SBATCH --partition=gpu
@@ -23,7 +24,9 @@ MODE=${MODE:-test}
 ADAPTERS=${ADAPTERS:-"stage2-r2 stage2-r3"}
 REPEATS=${REPEATS:-3}
 PARALLEL=${PARALLEL:-8}
-BASE=Qwen/Qwen3-4B-Instruct-2507
+BASE=${BASE:-Qwen/Qwen3-4B-Instruct-2507}
+# Hybrid Qwen3 models (8B) wrap replies in <think></think>: the reasoning parser takes it out
+case $BASE in *Qwen3-4B-Instruct-2507) thinking=() ;; *) thinking=(--reasoning-parser qwen3) ;; esac
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 lora=()
@@ -36,13 +39,20 @@ done
 # Same server settings as ml/colab/serve_trained_student.ipynb
 start_vllm student 8001 "$BASE" \
   --max-model-len 32768 --gpu-memory-utilization 0.85 \
-  --enable-auto-tool-choice --tool-call-parser hermes \
+  --enable-auto-tool-choice --tool-call-parser hermes ${thinking[@]+"${thinking[@]}"} \
   ${lora[@]:+--enable-lora --max-lora-rank 64 --max-loras ${#lora[@]} --lora-modules "${lora[@]}"}
 
 export STUDENT_BASE_URL=http://127.0.0.1:8001/v1 STUDENT_API_KEY=$VLLM_KEY
 cd "$HS_CODE"
 for a in $ADAPTERS; do
-  if [ "$a" = base ]; then model=$BASE; label=qwen3-4b-base; else model=huskyswap-student-$a; label=$a; fi
+  if [ "$a" = base ]; then
+    model=$BASE
+    case $BASE in *Qwen3-4B-Instruct-2507) label=qwen3-4b-base ;; *) label=$(basename "$BASE" | tr '[:upper:]' '[:lower:]')-base ;; esac
+  else
+    model=huskyswap-student-$a
+    label=$a
+  fi
+  smoke_test "$model" 8001
   export STUDENT_MODEL=$model STUDENT_VERSION=$label
   case $MODE in
     test) for k in $(seq 1 "$REPEATS"); do npm run -s eval -- --set=eval/test-set.json --model=student --parallel="$PARALLEL" --label="test-student-$label-run$k"; done ;;

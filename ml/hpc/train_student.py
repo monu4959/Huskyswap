@@ -11,6 +11,10 @@ Loss is only on the model's own (assistant) turns. 5% of original questions are 
 out (with their variants) to report a held-out loss.
 
   python train_student.py --data ml/datasets --out /projects/huskyswap/adapters --run r3
+  python train_student.py ... --run r3-8b --base unsloth/Qwen3-8B --no-thinking
+
+--no-thinking is for hybrid Qwen3 models (8B): examples are rendered in their non-thinking
+mode, so the student answers directly like the 4B instruct model does.
 """
 
 import argparse
@@ -27,6 +31,7 @@ parser.add_argument("--max-len", type=int, default=8192)
 parser.add_argument("--rank", type=int, default=32)
 parser.add_argument("--clarify-repeat", type=int, default=1)
 parser.add_argument("--seed", type=int, default=7)
+parser.add_argument("--no-thinking", action="store_true", help="render with enable_thinking=False (hybrid Qwen3 models)")
 args = parser.parse_args()
 
 STAGE1 = dict(epochs=2, lr=2e-4)
@@ -54,7 +59,8 @@ def load_jsonl(name):
 
 def render(example):
     messages = [dict(m, content=m.get("content") or "") for m in example["messages"]]
-    return tokenizer.apply_chat_template(messages, tools=example.get("tools"), tokenize=False)
+    extra = {"enable_thinking": False} if args.no_thinking else {}
+    return tokenizer.apply_chat_template(messages, tools=example.get("tools"), tokenize=False, **extra)
 
 
 def build(rows, label):

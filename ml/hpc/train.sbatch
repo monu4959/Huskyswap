@@ -3,6 +3,7 @@
 # Reads ml/datasets/stage{1,2}.jsonl, writes /projects/huskyswap/adapters/stage{1,2}-RUN.
 #
 #   RUN=r3 sbatch ml/hpc/train.sbatch
+#   RUN=r3-8b BASE=unsloth/Qwen3-8B sbatch ml/hpc/train.sbatch      the bigger student, same data
 #
 #SBATCH --job-name=hs-train
 #SBATCH --partition=gpu
@@ -15,7 +16,10 @@
 set -euo pipefail
 source /projects/huskyswap/code/ml/hpc/env.sh
 RUN=${RUN:?set RUN, e.g. RUN=r3}
+BASE=${BASE:-unsloth/Qwen3-4B-Instruct-2507}
+# Other Qwen3 models are hybrids that can think first: train them in non-thinking mode
+case $BASE in *Qwen3-4B-Instruct-2507) extra=() ;; *) extra=(--no-thinking) ;; esac
 if [ -e "$HS/adapters/stage2-$RUN" ]; then echo "$HS/adapters/stage2-$RUN already exists: pick a new RUN name"; exit 1; fi
 sha256sum "$HS_CODE/ml/datasets/stage1.jsonl" "$HS_CODE/ml/datasets/stage2.jsonl"   # for the registry
-"$HS/env/train/bin/python" "$HS_CODE/ml/hpc/train_student.py" --data "$HS_CODE/ml/datasets" --out "$HS/adapters" --run "$RUN"
+"$HS/env/train/bin/python" "$HS_CODE/ml/hpc/train_student.py" --data "$HS_CODE/ml/datasets" --out "$HS/adapters" --run "$RUN" --base "$BASE" ${extra[@]+"${extra[@]}"}
 rm -rf "$HS/adapters/tmp-stage1-$RUN" "$HS/adapters/tmp-stage2-$RUN"

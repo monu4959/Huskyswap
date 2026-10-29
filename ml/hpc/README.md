@@ -54,22 +54,30 @@ sbatch ml/hpc/datagen.sbatch                 # 60 explore rounds, then the check
 When a job runs out of time it prints "submit the job again to continue": do that until the
 log ends with the export stats. Then `ml/datasets/stats.json` shows the new totals.
 
-## 5. Train run 3
+## 5. Train run 3: the 4B and the 8B on the same data
 
 ```bash
-RUN=r3 sbatch ml/hpc/train.sbatch            # adapters: /projects/huskyswap/adapters/stage2-r3
+RUN=r3 sbatch ml/hpc/train.sbatch                                # Qwen3-4B, as before -> adapters/stage2-r3
+RUN=r3-8b BASE=unsloth/Qwen3-8B sbatch ml/hpc/train.sbatch       # Qwen3-8B, non-thinking -> adapters/stage2-r3-8b
 ```
 
-The log prints both held-out losses and the data hashes for the registry.
+Both can run at once (one H200 each). Each log prints both held-out losses and the data
+hashes for the registry. r2 vs r3 shows what the new data did; r3 vs r3-8b shows what size does.
 
 ## 6. Evaluate
 
-Add `stage2-r3` to `ml/registry.json` first (on your laptop, then `git pull` here), then:
+Add `stage2-r3` and `stage2-r3-8b` to `ml/registry.json` first (on your laptop, then
+`git pull` here). An adapter is served on top of its own base model, so the 8B runs in its own job:
 
 ```bash
-MODE=gate ADAPTERS=stage2-r3 sbatch ml/hpc/eval.sbatch    # dev set vs production; writes eval/gates/
-sbatch ml/hpc/eval.sbatch                                  # test set, 3 runs each for r2 and r3
+MODE=gate ADAPTERS=stage2-r3 sbatch ml/hpc/eval.sbatch                          # dev set vs production
+MODE=gate ADAPTERS=stage2-r3-8b BASE=Qwen/Qwen3-8B sbatch ml/hpc/eval.sbatch
+sbatch ml/hpc/eval.sbatch                                                        # test set x3: r2 and r3
+BASE=Qwen/Qwen3-8B ADAPTERS="base stage2-r3-8b" sbatch ml/hpc/eval.sbatch        # test set x3: untrained 8B and r3-8b
 ```
+
+Every eval job first sends one tool call to each model and stops if the reply has no tool
+call or leaks `<think>` tags, so a misconfigured server never produces a report.
 
 Copy the reports and gate file back to your laptop and commit them there:
 

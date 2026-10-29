@@ -10,7 +10,7 @@
 #SBATCH --partition=short
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=04:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=/projects/huskyswap/logs/%x-%j.out
 
 set -euo pipefail
@@ -49,7 +49,7 @@ fi
 (cd "$HS_CODE" && npm ci --no-audit --no-fund)
 
 # Model weights, so GPU jobs don't spend their time downloading
-for model in openai/gpt-oss-120b Qwen/Qwen3-4B-Instruct-2507 unsloth/Qwen3-4B-Instruct-2507; do
+for model in openai/gpt-oss-120b Qwen/Qwen3-4B-Instruct-2507 unsloth/Qwen3-4B-Instruct-2507 Qwen/Qwen3-8B unsloth/Qwen3-8B; do
   "$HS/env/vllm/bin/hf" download "$model" > /dev/null
   echo "downloaded $model"
 done
