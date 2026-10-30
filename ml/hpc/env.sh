@@ -15,6 +15,9 @@ export HF_HOME=$HS/hf-cache
 export UV_CACHE_DIR=$HS/cache/uv
 export npm_config_cache=$HS/cache/npm
 export EMBED_CACHE_DIR=$HS/cache/models   # gte-small, for retrieval and the novelty filter
+# onnxruntime-node fetches its CUDA add-on from NuGet on install, which compute nodes can't
+# reach; the embeddings run on the CPU, so skip it
+export ONNXRUNTIME_NODE_INSTALL=skip
 export PATH=$HS/node/bin:$HS/bin:$PATH
 mkdir -p "$HS/logs" "$HS/adapters" "$HF_HOME"
 

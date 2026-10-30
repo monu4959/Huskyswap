@@ -34,16 +34,27 @@ if [ ! -x "$HS/bin/uv" ]; then
 fi
 echo "$(uv --version)"
 
-# Two environments, because vLLM and Unsloth pin different library versions
-if [ ! -x "$HS/env/vllm/bin/vllm" ]; then
-  uv venv --python 3.12 "$HS/env/vllm"
-  VIRTUAL_ENV="$HS/env/vllm" uv pip install vllm
+# Two environments, because vLLM and Unsloth pin different library versions.
+# The GPU nodes' driver (570) supports CUDA 12.8, but the default PyTorch and vLLM builds now
+# target CUDA 13 and fail with "driver too old". CUDA 12.9 builds run on 12.8 drivers (NVIDIA's
+# minor-version compatibility), and 12.9 is the oldest CUDA current vLLM is built for.
+TORCH_CUDA=cu129
+VLLM_VERSION=0.32.0
+cuda12() { [ -x "$1/bin/python" ] && "$1/bin/python" -c "import sys, torch; sys.exit(not (torch.version.cuda or '').startswith('12.'))" 2> /dev/null; }
+if ! cuda12 "$HS/env/vllm" || [ ! -x "$HS/env/vllm/bin/vllm" ]; then
+  uv venv --clear --python 3.12 "$HS/env/vllm"
+  VIRTUAL_ENV="$HS/env/vllm" uv pip install --torch-backend="$TORCH_CUDA" \
+    "https://github.com/vllm-project/vllm/releases/download/v$VLLM_VERSION/vllm-$VLLM_VERSION+$TORCH_CUDA-cp38-abi3-manylinux_2_28_x86_64.whl"
 fi
-if [ ! -x "$HS/env/train/bin/python" ] || ! "$HS/env/train/bin/python" -c "import unsloth" 2> /dev/null; then
-  uv venv --python 3.12 "$HS/env/train"
-  VIRTUAL_ENV="$HS/env/train" uv pip install unsloth
+# (find_spec, not import: importing Unsloth on a CPU node fails because there is no GPU)
+if ! cuda12 "$HS/env/train" || ! "$HS/env/train/bin/python" -c "import sys, importlib.util as u; sys.exit(u.find_spec('unsloth') is None)"; then
+  uv venv --clear --python 3.12 "$HS/env/train"
+  # xformers has no CUDA 12.9 build for this PyTorch; Unsloth falls back to PyTorch's own attention
+  echo xformers > "$HS/cache/no-xformers.txt"
+  VIRTUAL_ENV="$HS/env/train" uv pip install --torch-backend="$TORCH_CUDA" --excludes "$HS/cache/no-xformers.txt" unsloth
 fi
-"$HS/env/vllm/bin/python" -c "import vllm; print('vllm', vllm.__version__)"
+"$HS/env/vllm/bin/python" -c "import torch, vllm; print('vllm', vllm.__version__, 'torch', torch.__version__)"
+"$HS/env/train/bin/python" -c "import torch; print('train torch', torch.__version__)"
 
 # The app's packages (the agent, datagen and eval scripts run under Node)
 (cd "$HS_CODE" && npm ci --no-audit --no-fund)
