@@ -18,6 +18,9 @@ export EMBED_CACHE_DIR=$HS/cache/models   # gte-small, for retrieval and the nov
 # onnxruntime-node fetches its CUDA add-on from NuGet on install, which compute nodes can't
 # reach; the embeddings run on the CPU, so skip it
 export ONNXRUNTIME_NODE_INSTALL=skip
+# vLLM samples with FlashInfer by default, which compiles its kernel on first use and needs
+# nvcc and ninja; the compute nodes have neither, so use vLLM's PyTorch sampler
+export VLLM_USE_FLASHINFER_SAMPLER=0
 export PATH=$HS/node/bin:$HS/bin:$PATH
 mkdir -p "$HS/logs" "$HS/adapters" "$HF_HOME"
 
