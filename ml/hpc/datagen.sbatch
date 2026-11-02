@@ -25,6 +25,7 @@ STAGES=${STAGES:-"explore reword reference traces export"}
 ROUNDS=${ROUNDS:-60}
 PARALLEL=${PARALLEL:-12}
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+db_tunnel   # before the teacher loads, so a missing database fails in seconds
 
 # Same server settings as the Colab teacher (ml/colab/serve_teacher.ipynb)
 start_vllm teacher 8000 openai/gpt-oss-120b \

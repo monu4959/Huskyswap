@@ -22,6 +22,10 @@ export ONNXRUNTIME_NODE_INSTALL=skip
 # nvcc and ninja; the compute nodes have neither, so use vLLM's PyTorch sampler
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export PATH=$HS/node/bin:$HS/bin:$PATH
+# Compute nodes reach the internet only through the cluster's web proxy (http_proxy). Keep the
+# local model servers off it (the proxy answers 403), and let Node's fetch use it as well
+export no_proxy="127.0.0.1,localhost${no_proxy:+,$no_proxy}" NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,$NO_PROXY}"
+export NODE_USE_ENV_PROXY=1
 mkdir -p "$HS/logs" "$HS/adapters" "$HF_HOME"
 
 # A key for the local model servers: other users' jobs can share the node and reach 127.0.0.1
@@ -67,8 +71,38 @@ if not calls or "<think>" in content:
 PY
 }
 
+# db_tunnel: compute nodes can't reach Supabase, but the login nodes can, so forward the
+# database through a login node over SSH and point DATABASE_URL and NLQ_DATABASE_URL at it
+# (they override .env.local). The key is limited to this one forward; see README.md.
+DB_HOST=aws-0-us-east-1.pooler.supabase.com
+db_tunnel() {
+  local port=$((20000 + ${SLURM_JOB_ID:-$$} % 20000)) login pid var url
+  for login in explorer-01 explorer-02; do
+    ssh -N -i ~/.ssh/hs_tunnel -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
+      -o StrictHostKeyChecking=accept-new -L "127.0.0.1:$port:$DB_HOST:5432" "$login" &
+    pid=$!
+    for _ in $(seq 20); do
+      if (echo > "/dev/tcp/127.0.0.1/$port") 2> /dev/null; then
+        TUNNEL_PIDS="${TUNNEL_PIDS:-} $pid"
+        for var in DATABASE_URL NLQ_DATABASE_URL; do
+          url=$(grep "^$var=" "$HS_CODE/.env.local" | cut -d= -f2- | tr -d "\"'\r")
+          export "$var=${url/@$DB_HOST:5432/@127.0.0.1:$port}"
+        done
+        echo "database tunnel via $login on port $port"
+        return 0
+      fi
+      kill -0 "$pid" 2> /dev/null || break
+      sleep 1
+    done
+    kill "$pid" 2> /dev/null || true
+  done
+  echo "could not open the database tunnel (one-time key setup: ml/hpc/README.md)"
+  return 1
+}
+
+# stop the model servers and the database tunnel (job scripts trap this on exit)
 stop_vllm() {
-  for pid in ${VLLM_PIDS:-}; do kill "$pid" 2> /dev/null || true; done
+  for pid in ${VLLM_PIDS:-} ${TUNNEL_PIDS:-}; do kill "$pid" 2> /dev/null || true; done
 }
 
 # Minutes left in this job, minus a margin for saving and shutting down

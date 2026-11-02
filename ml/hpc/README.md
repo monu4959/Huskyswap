@@ -36,6 +36,28 @@ folder, then copy it to `/projects/huskyswap/adapters/stage2-r2/` (it must conta
 
 Rerun `setup.sh` any time; its last lines list anything still missing.
 
+## 2b. Once: the database tunnel key (login node)
+
+Compute nodes reach the internet only through the cluster's web proxy, which doesn't carry
+Postgres, but the login nodes can reach Supabase. So each GPU job forwards the database through
+a login node over SSH (`db_tunnel` in `env.sh`). This key can only open that one forward:
+no shell, no other destinations.
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "huskyswap db tunnel" -f ~/.ssh/hs_tunnel
+echo "restrict,port-forwarding,permitopen=\"aws-0-us-east-1.pooler.supabase.com:5432\",command=\"/bin/false\" $(cat ~/.ssh/hs_tunnel.pub)" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+## 2c. Before GPU jobs: preflight (CPU node, about a minute)
+
+```bash
+srun -p short -t 00:10:00 --mem=4G bash /projects/huskyswap/code/ml/hpc/preflight.sh
+```
+
+It checks local servers bypass the proxy, the tunnel, both database logins and the embedding
+model download. Run it after any change to the setup; GPU jobs wait hours in the queue.
+
 ## 3. Test the explore stage (2 rounds, under an hour)
 
 ```bash

@@ -28,6 +28,7 @@ BASE=${BASE:-Qwen/Qwen3-4B-Instruct-2507}
 # Hybrid Qwen3 models (8B) wrap replies in <think></think>: the reasoning parser takes it out
 case $BASE in *Qwen3-4B-Instruct-2507) thinking=() ;; *) thinking=(--reasoning-parser qwen3) ;; esac
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+db_tunnel   # before the models load, so a missing database fails in seconds
 
 lora=()
 for a in $ADAPTERS; do
