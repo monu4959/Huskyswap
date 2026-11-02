@@ -123,6 +123,58 @@
         ],
         "test": "2026-10-25-test-student-stage2-r2.json"
       }
+    },
+    {
+      "id": "stage2-r3",
+      "kind": "student",
+      "served": "huskyswap-student-stage2-r3",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "trained",
+      "notes": "Run 3: r2's data plus 344 explore questions (new kinds: gaps, cohorts, running totals, period comparisons), trained on the Explorer cluster.",
+      "training": {
+        "commit": "c31b483",
+        "base": "Qwen/Qwen3-4B-Instruct-2507",
+        "adapter": "explorer:/projects/huskyswap/adapters/stage2-r3",
+        "method": "LoRA rank 32; stage 1: 2 epochs, lr 2e-4; stage 2: 2 epochs, lr 1e-4, 15% stage-1 mix; seed 7",
+        "data": {
+          "stage1Examples": 2062,
+          "stage2Examples": 6112,
+          "stage1Sha256": "f19aa8fb73605c50ff70bc0480107176e2790c139100cfe126566999d7f532ee",
+          "stage2Sha256": "a0b0740e8e9f59b65842385ac8e8e12f95c83eaeb05d3bacaae9c9519f0e65f2"
+        },
+        "heldOutLoss": { "stage1": 0.2027, "stage2": 0.2238 }
+      },
+      "evals": {
+        "dev": [],
+        "test": null
+      }
+    },
+    {
+      "id": "stage2-r3-8b",
+      "kind": "student",
+      "served": "huskyswap-student-stage2-r3-8b",
+      "prompt": "v4/s5",
+      "agentTag": "agent-v4-frozen",
+      "status": "trained",
+      "notes": "Run 3 on Qwen3-8B (non-thinking): same data and settings as stage2-r3, to measure what model size buys.",
+      "training": {
+        "commit": "c31b483",
+        "base": "Qwen/Qwen3-8B",
+        "adapter": "explorer:/projects/huskyswap/adapters/stage2-r3-8b",
+        "method": "LoRA rank 32; stage 1: 2 epochs, lr 2e-4; stage 2: 2 epochs, lr 1e-4, 15% stage-1 mix; seed 7; rendered with enable_thinking=False",
+        "data": {
+          "stage1Examples": 2062,
+          "stage2Examples": 6112,
+          "stage1Sha256": "f19aa8fb73605c50ff70bc0480107176e2790c139100cfe126566999d7f532ee",
+          "stage2Sha256": "a0b0740e8e9f59b65842385ac8e8e12f95c83eaeb05d3bacaae9c9519f0e65f2"
+        },
+        "heldOutLoss": { "stage1": 0.1434, "stage2": 0.1712 }
+      },
+      "evals": {
+        "dev": [],
+        "test": null
+      }
     }
   ],
   "history": [
