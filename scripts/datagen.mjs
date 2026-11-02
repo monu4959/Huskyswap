@@ -22,6 +22,7 @@
 // Every training target comes from the teacher. Questions too close to the eval
 // set are dropped. Uses the teacher in .env.local (self-hosted recommended).
 
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseJson } from "../src/lib/agent/clarify.ts";
@@ -197,7 +198,9 @@ async function explore() {
 
   await pool(todo, async (r) => {
     // A seeded focus per round: role, 1-3 views the role can read, one skill
-    let st = [...`explore-${SEED}-${r}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 4294967296, 7);
+    // (seeded from a hash: a seed like fill's string sum barely changes between neighbouring
+    // rounds, and this generator's first draw then lands in the same narrow range every round)
+    let st = createHash("sha256").update(`explore-${SEED}-${r}`).digest().readUInt32LE(0);
     const rand = () => ((st = (st * 1664525 + 1013904223) % 4294967296) / 4294967296);
     const qRole = rand() < 0.65 ? "admin" : "student";
     const visible = SCHEMA_CARD.filter((v) => v.roles.includes(qRole === "admin" ? "nlq_admin" : "nlq_student"));
