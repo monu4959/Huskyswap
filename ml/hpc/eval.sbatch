@@ -25,8 +25,14 @@ ADAPTERS=${ADAPTERS:-"stage2-r2 stage2-r3"}
 REPEATS=${REPEATS:-3}
 PARALLEL=${PARALLEL:-8}
 BASE=${BASE:-Qwen/Qwen3-4B-Instruct-2507}
-# Hybrid Qwen3 models (8B) wrap replies in <think></think>: the reasoning parser takes it out
-case $BASE in *Qwen3-4B-Instruct-2507) thinking=() ;; *) thinking=(--reasoning-parser qwen3) ;; esac
+# Hybrid Qwen3 models (8B) think before answering unless told not to. Thinking is off, the way
+# the 8B student was trained (train_student.py --no-thinking); THINKING=1 lets the untrained
+# model reason first. The reasoning parser takes any <think></think> out of the reply
+case $BASE in
+  *Qwen3-4B-Instruct-2507) thinking=() ;;
+  *) thinking=(--reasoning-parser qwen3)
+     [ "${THINKING:-0}" = 1 ] || thinking+=(--default-chat-template-kwargs '{"enable_thinking": false}') ;;
+esac
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 db_tunnel   # before the models load, so a missing database fails in seconds
 
@@ -48,10 +54,10 @@ cd "$HS_CODE"
 for a in $ADAPTERS; do
   if [ "$a" = base ]; then
     model=$BASE
-    case $BASE in *Qwen3-4B-Instruct-2507) label=qwen3-4b-base ;; *) label=$(basename "$BASE" | tr '[:upper:]' '[:lower:]')-base ;; esac
+    case $BASE in *Qwen3-4B-Instruct-2507) label=qwen3-4b-base ;; *) label=$(basename "$BASE" | tr '[:upper:]' '[:lower:]')-base${THINKING:+-thinking} ;; esac
   else
     model=huskyswap-student-$a
-    label=$a
+    label=$a${THINKING:+-thinking}
   fi
   smoke_test "$model" "$VLLM_PORT"
   export STUDENT_MODEL=$model STUDENT_VERSION=$label
