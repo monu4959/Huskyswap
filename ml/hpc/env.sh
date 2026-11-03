@@ -30,12 +30,16 @@ mkdir -p "$HS/logs" "$HS/adapters" "$HF_HOME"
 
 # A key for the local model servers: other users' jobs can share the node and reach 127.0.0.1
 export VLLM_KEY=${VLLM_KEY:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}
+# This job's port for its model server. Several jobs share an H200 node, and with a fixed port
+# one job's requests reached another job's server (401: wrong key). The tunnel uses 20000-39999
+export VLLM_PORT=$((40000 + ${SLURM_JOB_ID:-$$} % 20000))
 
 # start_vllm NAME PORT MODEL [vllm args...]: serve on 127.0.0.1 and wait until it answers
 start_vllm() {
   local name=$1 port=$2
   shift 2
   local log="$HS/logs/$name-${SLURM_JOB_ID:-local}.vllm.log"
+  if curl -s -o /dev/null "http://127.0.0.1:$port/"; then echo "port $port is already taken on this node"; return 1; fi
   "$HS/env/vllm/bin/vllm" serve "$@" --host 127.0.0.1 --port "$port" --api-key "$VLLM_KEY" > "$log" 2>&1 &
   local pid=$!
   VLLM_PIDS="${VLLM_PIDS:-} $pid"

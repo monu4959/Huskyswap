@@ -28,12 +28,12 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 db_tunnel   # before the teacher loads, so a missing database fails in seconds
 
 # Same server settings as the Colab teacher (ml/colab/serve_teacher.ipynb)
-start_vllm teacher 8000 openai/gpt-oss-120b \
+start_vllm teacher "$VLLM_PORT" openai/gpt-oss-120b \
   --max-model-len 32768 --gpu-memory-utilization 0.92 \
   --enable-auto-tool-choice --tool-call-parser openai
 
 # These override .env.local: the teacher is this node's server, and the Groq key pool is off
-export TEACHER_BASE_URL=http://127.0.0.1:8000/v1 TEACHER_API_KEY=$VLLM_KEY TEACHER_API_KEYS= TEACHER_MODEL=openai/gpt-oss-120b
+export TEACHER_BASE_URL=http://127.0.0.1:$VLLM_PORT/v1 TEACHER_API_KEY=$VLLM_KEY TEACHER_API_KEYS= TEACHER_MODEL=openai/gpt-oss-120b
 
 cd "$HS_CODE"
 for stage in $STAGES; do

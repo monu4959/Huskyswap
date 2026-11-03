@@ -38,12 +38,12 @@ for a in $ADAPTERS; do
 done
 
 # Same server settings as ml/colab/serve_trained_student.ipynb
-start_vllm student 8001 "$BASE" \
+start_vllm student "$VLLM_PORT" "$BASE" \
   --max-model-len 32768 --gpu-memory-utilization 0.85 \
   --enable-auto-tool-choice --tool-call-parser hermes ${thinking[@]+"${thinking[@]}"} \
   ${lora[@]:+--enable-lora --max-lora-rank 64 --max-loras ${#lora[@]} --lora-modules "${lora[@]}"}
 
-export STUDENT_BASE_URL=http://127.0.0.1:8001/v1 STUDENT_API_KEY=$VLLM_KEY
+export STUDENT_BASE_URL=http://127.0.0.1:$VLLM_PORT/v1 STUDENT_API_KEY=$VLLM_KEY
 cd "$HS_CODE"
 for a in $ADAPTERS; do
   if [ "$a" = base ]; then
@@ -53,7 +53,7 @@ for a in $ADAPTERS; do
     model=huskyswap-student-$a
     label=$a
   fi
-  smoke_test "$model" 8001
+  smoke_test "$model" "$VLLM_PORT"
   export STUDENT_MODEL=$model STUDENT_VERSION=$label
   case $MODE in
     test) for k in $(seq 1 "$REPEATS"); do npm run -s eval -- --set=eval/test-set.json --model=student --parallel="$PARALLEL" --label="test-student-$label-run$k"; done ;;
