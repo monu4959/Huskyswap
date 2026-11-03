@@ -1,12 +1,16 @@
 # HuskySwap
 
-**Live demo: https://huskyswap.vercel.app** (sign in with any `@northeastern.edu` email and any 6-digit code; all data is synthetic)
+> ### 👉 Try it live: [huskyswap.vercel.app](https://huskyswap.vercel.app)
+>
+> Sign in with any `@northeastern.edu` email and any 6-digit code. All data is synthetic.
+> Tap the husky in the corner to ask the marketplace questions in plain English.
+> **On a phone:** open the link, then Share → **Add to Home Screen** (iPhone) or **Install app** (Android) to use it like an app.
 
 A marketplace for Northeastern students: buy, sell, and borrow things for a week. Sign-in needs an `@northeastern.edu` email. Payment happens in person at a campus meetup spot.
 
 The app runs on **Supabase** (Postgres, Auth, Storage, Realtime). The database holds ~1,000 synthetic students and their listings, deals and chats, which makes it a ready dataset for a text-to-SQL project.
 
-Design: `app-design.html` (navy surfaces, cyan-to-indigo action gradient, Sora + Figtree). Dark is the default theme. Switch to light under **Profile → App theme**.
+Design: warm off-white pages, white cards, Fraunces headings with DM Sans text, and Northeastern red for actions. The tokens live in `src/app/globals.css`. The app follows the device's light or dark setting; change it under **Profile → App theme**.
 
 ## Run it
 
