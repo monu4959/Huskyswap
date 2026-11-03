@@ -29,6 +29,8 @@ function getPool() {
     pool = new pg.Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 3, idleTimeoutMillis: 10_000, types });
     // An idle connection dropped by the pooler must not crash the process; the pool replaces it
     pool.on("error", () => {});
+    // Nor one dropped mid-query: the query fails and runSelect discards the connection
+    pool.on("connect", (client) => client.on("error", () => {}));
   }
   return pool;
 }

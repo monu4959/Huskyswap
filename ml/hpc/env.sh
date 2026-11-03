@@ -78,35 +78,42 @@ PY
 # db_tunnel: compute nodes can't reach Supabase, but the login nodes can, so forward the
 # database through a login node over SSH and point DATABASE_URL and NLQ_DATABASE_URL at it
 # (they override .env.local). The key is limited to this one forward; see README.md.
+# Login nodes drop connections now and then (two eval jobs lost theirs in the same second),
+# so the tunnel reopens on the same port, alternating login nodes, for as long as the job runs.
 DB_HOST=aws-0-us-east-1.pooler.supabase.com
 db_tunnel() {
-  local port=$((20000 + ${SLURM_JOB_ID:-$$} % 20000)) login pid var url
-  for login in explorer-01 explorer-02; do
-    ssh -N -i ~/.ssh/hs_tunnel -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
-      -o StrictHostKeyChecking=accept-new -L "127.0.0.1:$port:$DB_HOST:5432" "$login" &
-    pid=$!
-    for _ in $(seq 20); do
-      if (echo > "/dev/tcp/127.0.0.1/$port") 2> /dev/null; then
-        TUNNEL_PIDS="${TUNNEL_PIDS:-} $pid"
-        for var in DATABASE_URL NLQ_DATABASE_URL; do
-          url=$(grep "^$var=" "$HS_CODE/.env.local" | cut -d= -f2- | tr -d "\"'\r")
-          export "$var=${url/@$DB_HOST:5432/@127.0.0.1:$port}"
-        done
-        echo "database tunnel via $login on port $port"
-        return 0
-      fi
-      kill -0 "$pid" 2> /dev/null || break
-      sleep 1
+  local port=$((20000 + ${SLURM_JOB_ID:-$$} % 20000)) pid var url
+  (
+    while :; do
+      for login in explorer-01 explorer-02; do
+        ssh -N -i ~/.ssh/hs_tunnel -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
+          -o ServerAliveCountMax=2 -o StrictHostKeyChecking=accept-new -L "127.0.0.1:$port:$DB_HOST:5432" "$login"
+        echo "database tunnel via $login closed at $(date +%T); reopening"
+        sleep 2
+      done
     done
-    kill "$pid" 2> /dev/null || true
+  ) &
+  pid=$!
+  TUNNEL_PIDS="${TUNNEL_PIDS:-} $pid"
+  for _ in $(seq 40); do
+    if (echo > "/dev/tcp/127.0.0.1/$port") 2> /dev/null; then
+      for var in DATABASE_URL NLQ_DATABASE_URL; do
+        url=$(grep "^$var=" "$HS_CODE/.env.local" | cut -d= -f2- | tr -d "\"'\r")
+        export "$var=${url/@$DB_HOST:5432/@127.0.0.1:$port}"
+      done
+      echo "database tunnel on port $port"
+      return 0
+    fi
+    sleep 1
   done
   echo "could not open the database tunnel (one-time key setup: ml/hpc/README.md)"
   return 1
 }
 
-# stop the model servers and the database tunnel (job scripts trap this on exit)
+# stop the model servers and the database tunnel (job scripts trap this on exit); the tunnel
+# loop's ssh is stopped with it, or the loop would reopen it
 stop_vllm() {
-  for pid in ${VLLM_PIDS:-} ${TUNNEL_PIDS:-}; do kill "$pid" 2> /dev/null || true; done
+  for pid in ${VLLM_PIDS:-} ${TUNNEL_PIDS:-}; do kill $(pgrep -P "$pid") "$pid" 2> /dev/null || true; done
 }
 
 # Minutes left in this job, minus a margin for saving and shutting down
