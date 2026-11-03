@@ -5,11 +5,11 @@ import type { Item } from "@/lib/types";
 export function Price({ item, className = "" }: { item: Pick<Item, "sale" | "rental">; className?: string }) {
   const { sale, rental } = item;
   return (
-    <p className={`font-display text-[15px] font-semibold ${className}`}>
+    <p className={`text-lead leading-snug font-bold tracking-[-0.01em] ${className}`}>
       {sale ? formatPrice(sale.price) : formatPrice(rental!.price_per_week)}
-      {!sale && <small className="font-sans text-[11.5px] font-medium text-muted"> a week</small>}
+      {!sale && <small className="text-micro font-medium tracking-normal text-muted"> a week</small>}
       {sale && rental && (
-        <small className="font-sans text-[11.5px] font-medium text-muted">
+        <small className="text-micro font-medium tracking-normal text-muted">
           {" "}
           or {formatPrice(rental.price_per_week)} a week
         </small>

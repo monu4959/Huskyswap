@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Camera, ChevronDown, Plus, X } from "lucide-react";
-import { Button, Field, Seg, Switch, TopBar, inputClass, useAction, useToast } from "@/components/ui";
+import { Button, Field, Seg, Switch, TopBar, inputClass, narrowClass, useAction, useToast } from "@/components/ui";
 import { CATEGORIES, CATEGORY_LABEL, CONDITION_LABEL, RENTAL_DAYS } from "@/lib/constants";
 import { resizeImage } from "@/lib/format";
 import { MEETUP_SPOTS } from "@/lib/reference";
@@ -81,14 +81,14 @@ export default function SellPage() {
   };
 
   return (
-    <>
+    <div className={narrowClass}>
       <TopBar back="/" backIcon="close" title="New listing" />
-      <form onSubmit={submit} noValidate className="space-y-3.5 px-5 pt-1 pb-32">
+      <form onSubmit={submit} noValidate className="space-y-5 pt-2 pb-36 md:mb-16 md:rounded-sheet md:bg-surface md:p-8 md:shadow-raise">
         <fieldset>
-          <legend className="sr-only">Photos</legend>
-          <div className="grid grid-cols-3 gap-2.5">
+          <legend className="mb-2 text-small font-semibold">Photos</legend>
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
             {images.map((src, i) => (
-              <div key={i} className="relative h-[82px] overflow-hidden rounded-2xl shadow-raise">
+              <div key={i} className="relative aspect-square overflow-hidden rounded-tile bg-field shadow-raise">
                 {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
                 <img src={src} alt={`Photo ${i + 1}${i === 0 ? ", cover" : ""}`} className="h-full w-full object-cover" />
                 <button
@@ -101,11 +101,11 @@ export default function SellPage() {
                     <X className="size-3.5" />
                   </span>
                 </button>
-                {i === 0 && <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[11px] font-semibold text-white">Cover</span>}
+                {i === 0 && <span className="absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-micro font-semibold text-white">Cover</span>}
               </div>
             ))}
             {images.length < MAX_PHOTOS && (
-              <label className="grid h-[82px] cursor-pointer place-content-center justify-items-center gap-0.5 rounded-2xl border-[1.5px] border-dashed border-muted/55 text-center text-[11.5px] text-muted hover:text-fg">
+              <label className="grid aspect-square cursor-pointer place-content-center justify-items-center gap-1 rounded-tile border-[1.5px] border-dashed border-muted/45 bg-field/50 text-center text-micro font-semibold text-muted transition-colors focus-within:ring-2 focus-within:ring-accent-ink hover:border-accent-ink hover:text-accent-ink">
                 {images.length ? <Plus className="size-[22px]" aria-hidden /> : <Camera className="size-[22px]" aria-hidden />}
                 {images.length ? "More" : "Add photo"}
                 <input
@@ -145,7 +145,7 @@ export default function SellPage() {
         </Field>
 
         <div>
-          <span className="mb-[7px] block text-[12.5px] font-semibold text-muted">Condition</span>
+          <span className="mb-2 block text-small font-semibold">Condition</span>
           <div aria-invalid={!!errors.condition}>
             <Seg<ItemCondition | "">
               label="Condition"
@@ -154,12 +154,12 @@ export default function SellPage() {
               options={CONDITIONS.map((c) => ({ value: c, label: CONDITION_LABEL[c] }))}
             />
           </div>
-          {errors.condition && <p className="mt-1.5 text-[12.5px] text-coral">{errors.condition}</p>}
+          {errors.condition && <p className="mt-1.5 text-small text-coral">{errors.condition}</p>}
         </div>
 
         <div>
-          <span className="mb-[7px] block text-[12.5px] font-semibold text-muted">Offer it for</span>
-          <div className="rounded-[18px] bg-surface px-3.5 py-1 shadow-raise">
+          <span className="mb-2 block text-small font-semibold">Offer it for</span>
+          <div className="rounded-card bg-surface px-4 py-1 shadow-raise md:bg-field md:shadow-none">
             <OfferRow label="Sell" checked={forSale} onChange={setForSale}>
               <MoneyInput label="Sale price" value={price} onChange={setPrice} invalid={!!errors.price} />
             </OfferRow>
@@ -167,17 +167,17 @@ export default function SellPage() {
               <MoneyInput label="Price for the week" value={weekly} onChange={setWeekly} invalid={!!errors.weekly} />
             </OfferRow>
             {forRent && (
-              <div className="flex h-[46px] items-center gap-2.5 border-t border-line">
-                <b className="flex-1 text-[14px] font-semibold">
+              <div className="flex h-14 items-center gap-2.5 border-t border-line">
+                <b className="flex-1 text-body font-semibold">
                   Deposit <span className="font-normal text-muted">(optional)</span>
                 </b>
                 <MoneyInput label="Deposit" value={deposit} onChange={setDeposit} invalid={!!errors.deposit} />
-                <span className="w-10" />
+                <span className="w-11" />
               </div>
             )}
           </div>
           {(errors.offer || errors.price || errors.weekly || errors.deposit) && (
-            <p className="mt-1.5 text-[12.5px] text-coral">{errors.offer ?? errors.price ?? errors.weekly ?? errors.deposit}</p>
+            <p className="mt-1.5 text-small text-coral">{errors.offer ?? errors.price ?? errors.weekly ?? errors.deposit}</p>
           )}
         </div>
 
@@ -194,13 +194,14 @@ export default function SellPage() {
           </Select>
         </Field>
 
-        <div className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[480px] bg-bg/95 px-5 pt-3 pb-[max(env(safe-area-inset-bottom),22px)] backdrop-blur-sm">
+        {/* pinned to the bottom on phones, the end of the form on desktop */}
+        <div className="shadow-bar fixed inset-x-0 bottom-0 z-30 bg-surface/95 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] backdrop-blur-md md:static md:bg-transparent md:p-0 md:pt-2 md:shadow-none md:backdrop-blur-none">
           <Button type="submit" className="w-full">
             Post listing
           </Button>
         </div>
       </form>
-    </>
+    </div>
   );
 }
 
@@ -220,11 +221,11 @@ function OfferRow({
   children: ReactNode;
 }) {
   return (
-    <div className={`flex h-[46px] items-center gap-2.5 ${border ? "border-t border-line" : ""}`}>
-      <b className="flex-1 text-[14px] font-semibold">
+    <div className={`flex h-14 items-center gap-2.5 ${border ? "border-t border-line" : ""}`}>
+      <b className="flex-1 text-body font-semibold">
         {label} {sub && <span className="font-normal text-muted">{sub}</span>}
       </b>
-      {checked ? children : <span className="text-[12.5px] text-muted">Off</span>}
+      {checked ? children : <span className="text-small text-muted">Off</span>}
       <Switch checked={checked} onChange={onChange} label={label} />
     </div>
   );
@@ -232,7 +233,7 @@ function OfferRow({
 
 function MoneyInput({ label, value, onChange, invalid }: { label: string; value: string; onChange: (v: string) => void; invalid: boolean }) {
   return (
-    <label className="font-display flex h-8 w-[84px] items-center rounded-[10px] bg-field px-2 text-[14px] font-semibold shadow-inset focus-within:ring-[1.5px] focus-within:ring-cyan">
+    <label className="flex h-10 w-[96px] items-center rounded-full bg-field px-3 text-lead font-bold focus-within:bg-surface focus-within:ring-2 focus-within:ring-accent-ink md:bg-surface">
       <span aria-hidden className="text-muted">
         $
       </span>

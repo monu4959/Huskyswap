@@ -25,7 +25,7 @@ export function PhotoCreditLine({ src, className = "" }: { src: string | undefin
   }, [src]);
   if (!credit || credit.src !== src) return null;
   return (
-    <p className={`text-[11px] text-muted ${className}`}>
+    <p className={`text-micro text-muted ${className}`}>
       Photo{credit.modified ? " (cropped and color-adjusted)" : ""}:{" "}
       {credit.landing ? (
         <a href={credit.landing} target="_blank" rel="noreferrer" className="underline decoration-muted/50 underline-offset-2">

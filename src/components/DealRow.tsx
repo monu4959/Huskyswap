@@ -67,19 +67,22 @@ export function DealRow({ deal }: { deal: Transaction }) {
   const overdue = pill === "Overdue";
 
   return (
-    <Link href={`/deals/${deal.transaction_id}`} className="flex items-center gap-3 rounded-[20px] bg-surface p-2.5 shadow-raise">
-      <span className="size-[60px] shrink-0 overflow-hidden rounded-[14px]">
-        <ItemArt category={item.category} image={item.images[0]} alt="" artClass="size-11" />
+    <Link
+      href={`/deals/${deal.transaction_id}`}
+      className="flex items-center gap-3.5 rounded-card bg-surface p-3 shadow-raise transition-shadow hover:shadow-lift"
+    >
+      <span className="size-[68px] shrink-0 overflow-hidden rounded-tile bg-field">
+        <ItemArt category={item.category} image={item.images[0]} alt="" artClass="size-10" />
       </span>
       <span className="min-w-0 flex-1">
-        <b className="block truncate text-[13.5px] font-semibold">{item.title}</b>
-        <span className="mt-0.5 mb-1.5 block truncate text-[12px] text-muted">
+        <b className="block truncate text-body font-semibold">{item.title}</b>
+        <span className="mt-0.5 mb-2 block truncate text-small text-muted">
           {dealLine(deal, mine, other?.name ?? "them", spot)}
         </span>
         <span className="flex items-center">
           <StatusPill tone={overdue ? "coral" : dealTone(deal.status)}>{pill}</StatusPill>
           {deal.status === "completed" && !reviewed && (
-            <span className="ml-2 text-[12px] font-semibold whitespace-nowrap text-cyan">Leave a review</span>
+            <span className="ml-2 text-micro font-semibold whitespace-nowrap text-accent-ink">Leave a review</span>
           )}
         </span>
       </span>

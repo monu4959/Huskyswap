@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ItemCategory } from "@/lib/types";
 
-// Gradient line illustrations from app-design.html (plus a few in the same style).
+// Line illustrations from app-design.html (plus a few in the same style), in ink with a red accent.
 // Shown until a listing has real photos.
 const ART: Record<ItemCategory, { box: string; art: ReactNode }> = {
   textbooks: {
@@ -102,18 +102,10 @@ const ART: Record<ItemCategory, { box: string; art: ReactNode }> = {
   },
 };
 
-export function Illustration({
-  category,
-  onGrad = false,
-  className = "",
-}: {
-  category: ItemCategory;
-  onGrad?: boolean;
-  className?: string;
-}) {
+export function Illustration({ category, className = "" }: { category: ItemCategory; className?: string }) {
   const { box, art } = ART[category];
   return (
-    <svg viewBox={box} aria-hidden className={`ill ${onGrad ? "on-grad" : ""} ${className}`}>
+    <svg viewBox={box} aria-hidden className={`ill ${className}`}>
       {art}
     </svg>
   );

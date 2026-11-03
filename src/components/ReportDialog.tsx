@@ -30,20 +30,20 @@ export function ReportButton({ target, label }: { target: Target; label: string 
       <button
         type="button"
         onClick={() => ref.current?.showModal()}
-        className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] text-muted hover:text-fg"
+        className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-small text-muted transition-colors hover:text-fg"
       >
         <Flag className="size-4" aria-hidden />
         {label}
       </button>
       <dialog
         ref={ref}
-        className="m-auto w-[min(92vw,420px)] rounded-[24px] bg-surface p-5 text-fg shadow-raise backdrop:bg-black/60"
+        className="animate-pop-in m-auto w-[min(92vw,440px)] rounded-sheet bg-surface p-6 text-fg shadow-pop backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
         aria-labelledby="report-title"
       >
-        <h2 id="report-title" className="text-[18px] font-bold">
+        <h2 id="report-title" className="text-heading">
           {label}
         </h2>
-        <p className="mt-1 text-[13px] text-muted">Reports go to the moderators, not to the other student.</p>
+        <p className="mt-1.5 text-small text-muted">Reports go to the moderators, not to the other student.</p>
         <div className="mt-4">
           <Field label="What's wrong?">
             <textarea

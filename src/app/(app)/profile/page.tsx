@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BadgeCheck, Pencil, Plus } from "lucide-react";
+import { BadgeCheck, ChevronRight, MessageSquare, Pencil, Plus, ReceiptText } from "lucide-react";
 import { Avatar, Rating } from "@/components/Avatar";
 import { ItemCard } from "@/components/ItemCard";
-import { Button, Card, Seg, TopBar, buttonClass, inputClass, roundClass, useAction } from "@/components/ui";
+import { Button, Card, CountBadge, Seg, TopBar, buttonClass, inputClass, pageClass, roundClass, useAction } from "@/components/ui";
 import { timeAgo } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -15,7 +15,7 @@ const THEME_KEY = "huskyswap-theme";
 
 function useTheme() {
   // Only rendered in the browser (behind AuthGate), so the DOM is available here
-  const [theme, setTheme] = useState<Theme>(() => (document.documentElement.dataset.theme as Theme) || "dark");
+  const [theme, setTheme] = useState<Theme>(() => (document.documentElement.dataset.theme as Theme) || "system");
   const change = (t: Theme) => {
     setTheme(t);
     document.documentElement.dataset.theme = t;
@@ -43,11 +43,11 @@ export default function ProfilePage() {
   const reviews = store.db.reviews.filter((r) => r.reviewee_id === store.me).sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return (
-    <>
+    <div className={pageClass}>
       <TopBar back="/" title="Profile" />
-      <main className="space-y-6 px-5 pt-2 pb-32">
-        <section className="flex items-center gap-4">
-          <Avatar name={me.name} size={64} />
+      <main className="space-y-8 pt-2 pb-36 md:pb-24">
+        <section className="flex items-center gap-4 rounded-sheet bg-surface p-5 shadow-raise md:gap-6 md:p-8">
+          <Avatar name={me.name} size={72} />
           <div className="min-w-0 flex-1">
             {editing ? (
               <form
@@ -71,13 +71,13 @@ export default function ProfilePage() {
               </form>
             ) : (
               <p className="flex items-center gap-2">
-                <span className="font-display truncate text-[22px] font-bold">{me.name}</span>
+                <span className="font-display truncate text-title md:text-[2.25rem]">{me.name}</span>
                 <button type="button" onClick={() => setEditing(true)} aria-label="Edit name" className={`${roundClass} !size-9 !rounded-xl`}>
                   <Pencil className="size-4" />
                 </button>
               </p>
             )}
-            <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-green">
+            <p className="mt-0.5 flex items-center gap-1 text-small text-green">
               <BadgeCheck className="size-4 shrink-0" aria-hidden />
               <span className="truncate">{me.email}</span>
             </p>
@@ -85,8 +85,29 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        <section>
-          <span className="mb-[7px] block text-[12.5px] font-semibold text-muted">App theme</span>
+        <section className="grid gap-3 sm:grid-cols-2">
+          {[
+            { href: "/inbox", icon: MessageSquare, label: "Chats", sub: "Messages with buyers and sellers", count: store.unreadCount, countLabel: "unread" },
+            { href: "/deals", icon: ReceiptText, label: "Deals", sub: "Requests, handovers and returns", count: store.actionCount, countLabel: "need attention" },
+          ].map(({ href, icon: Icon, label, sub, count, countLabel }) => (
+            <Link key={href} href={href} className="flex items-center gap-3.5 rounded-card bg-surface p-4 shadow-raise transition-shadow hover:shadow-lift">
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
+                <Icon className="size-5" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <b className="flex items-center gap-2 text-body font-semibold">
+                  {label}
+                  <CountBadge count={count} label={countLabel} />
+                </b>
+                <span className="block truncate text-small text-muted">{sub}</span>
+              </span>
+              <ChevronRight className="size-5 text-muted" aria-hidden />
+            </Link>
+          ))}
+        </section>
+
+        <section className="max-w-md">
+          <span className="mb-2 block text-small font-semibold">App theme</span>
           <Seg<Theme>
             label="App theme"
             value={theme}
@@ -100,54 +121,54 @@ export default function ProfilePage() {
         </section>
 
         <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[16px] font-semibold">Your listings</h2>
-            <Link href="/sell" className={buttonClass("soft", "!h-9 rounded-xl px-3 text-[13px]")}>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-heading md:text-title">Your listings</h2>
+            <Link href="/sell" className={buttonClass("soft", "!h-10 px-4 text-small")}>
               <Plus className="size-4" aria-hidden />
               New
             </Link>
           </div>
           {listings.length ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {listings.map((item) => (
                 <ItemCard key={item.item_id} item={item} showStatus />
               ))}
             </div>
           ) : (
-            <p className="text-[14px] text-muted">You haven&apos;t listed anything yet.</p>
+            <p className="text-body text-muted">You haven&apos;t listed anything yet.</p>
           )}
         </section>
 
         <section>
-          <h2 className="mb-3 text-[16px] font-semibold">What people say</h2>
+          <h2 className="mb-4 text-heading md:text-title">What people say</h2>
           {reviews.length ? (
-            <ul className="space-y-2.5">
+            <ul className="grid gap-3 md:grid-cols-2">
               {reviews.map((r) => (
                 <li key={r.review_id}>
-                  <Card className="p-3.5">
-                    <p className="text-[13px]">
+                  <Card className="h-full p-4">
+                    <p className="text-small">
                       <span className="font-semibold">{store.profile(r.reviewer_id)?.name}</span>{" "}
                       <span className="text-muted">
                         gave {r.rating} of 5, {timeAgo(r.created_at)}
                       </span>
                     </p>
-                    {r.comment && <p className="mt-1 text-[13px] text-muted">{r.comment}</p>}
+                    {r.comment && <p className="mt-1 text-small text-muted">{r.comment}</p>}
                   </Card>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-[14px] text-muted">Reviews appear after your first completed deal.</p>
+            <p className="text-body text-muted">Reviews appear after your first completed deal.</p>
           )}
         </section>
 
-        <section className="space-y-2.5 pt-2">
-          <Link href="/credits" className={buttonClass("ghost", "w-full text-[13px] !text-muted")}>
+        <section className="flex flex-col gap-2.5 pt-2 sm:flex-row-reverse sm:justify-end">
+          <Link href="/credits" className={buttonClass("ghost", "text-small !text-muted")}>
             Photo credits
           </Link>
           <Button
             variant="soft"
-            className="w-full"
+            className="sm:px-10"
             onClick={async () => {
               await store.signOut();
               router.replace("/login");
@@ -157,6 +178,6 @@ export default function ProfilePage() {
           </Button>
         </section>
       </main>
-    </>
+    </div>
   );
 }

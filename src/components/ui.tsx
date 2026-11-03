@@ -13,17 +13,21 @@ import {
 } from "react";
 import { ActionError } from "@/lib/store";
 
+// Page widths: wide for browsing grids, narrow for forms, chats and detail flows
+export const pageClass = "mx-auto w-full max-w-[1240px] px-4 sm:px-6 md:px-8";
+export const narrowClass = "mx-auto w-full max-w-[720px] px-4 sm:px-6 md:px-8";
+
 type Variant = "grad" | "soft" | "ghost" | "danger";
 
 const VARIANT: Record<Variant, string> = {
-  grad: "bg-grad shadow-grad hover:brightness-110",
-  soft: "bg-surface text-fg shadow-raise hover:brightness-110",
-  ghost: "text-fg hover:bg-surface",
-  danger: "bg-surface text-coral shadow-raise hover:brightness-110",
+  grad: "bg-grad hover:bg-accent-press active:scale-[0.98]",
+  soft: "bg-surface text-fg shadow-raise hover:bg-field active:scale-[0.98]",
+  ghost: "text-fg hover:bg-field",
+  danger: "bg-surface text-coral shadow-raise hover:bg-field active:scale-[0.98]",
 };
 
 export const buttonClass = (variant: Variant = "grad", extra = "") =>
-  `font-display inline-flex h-[50px] items-center justify-center gap-2 rounded-2xl px-4 text-[14.5px] font-semibold transition-[filter,opacity] duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 ${VARIANT[variant]} ${extra}`;
+  `inline-flex h-[50px] items-center justify-center gap-2 rounded-full px-6 text-body font-semibold transition-[background-color,opacity,scale] duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 ${VARIANT[variant]} ${extra}`;
 
 export function Button({
   variant = "grad",
@@ -34,7 +38,7 @@ export function Button({
 }
 
 export const roundClass =
-  "grid size-[42px] shrink-0 cursor-pointer place-items-center rounded-[14px] bg-surface text-fg shadow-raise hover:brightness-110";
+  "grid size-[42px] shrink-0 cursor-pointer place-items-center rounded-full bg-surface text-fg shadow-raise transition-colors hover:bg-field";
 
 export function BackButton({ href, icon = "back" }: { href?: string; icon?: "back" | "close" }) {
   const router = useRouter();
@@ -53,7 +57,7 @@ export function BackButton({ href, icon = "back" }: { href?: string; icon?: "bac
   );
 }
 
-// Round back button, centered title, optional right action (app-design "topbar")
+// Round back button, centered title, optional right action. Sits under the desktop top nav.
 export function TopBar({
   title,
   back,
@@ -66,11 +70,24 @@ export function TopBar({
   right?: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-20 grid grid-cols-[42px_1fr_42px] items-center gap-2 bg-bg/95 px-5 pt-[max(env(safe-area-inset-top),12px)] pb-3 backdrop-blur-sm">
+    <header className="sticky top-0 z-20 grid grid-cols-[42px_1fr_42px] items-center gap-2 bg-bg/90 px-4 pt-[max(env(safe-area-inset-top),12px)] pb-3 backdrop-blur-md md:top-16 md:px-0 md:pt-6">
       {back ? <BackButton href={back === true ? undefined : back} icon={backIcon} /> : <span />}
-      <h1 className="truncate text-center text-[17px] font-semibold">{title}</h1>
+      <h1 className="truncate text-center text-heading">{title}</h1>
       <div className="flex justify-end">{right}</div>
     </header>
+  );
+}
+
+// A page heading for top-level screens (Saved, Chats, Deals)
+export function PageTitle({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 pt-[max(env(safe-area-inset-top),20px)] md:pt-10">
+      <div>
+        <h1 className="text-title md:text-[2.5rem]">{title}</h1>
+        {sub && <p className="mt-1.5 text-small text-muted">{sub}</p>}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -87,21 +104,21 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-[7px] block text-[12.5px] font-semibold text-muted">{label}</span>
+      <span className="mb-2 block text-small font-semibold text-fg">{label}</span>
       {children}
       {error ? (
-        <span className="mt-1.5 block text-[12.5px] text-coral">{error}</span>
+        <span className="mt-1.5 block text-small text-coral">{error}</span>
       ) : hint ? (
-        <span className="mt-1.5 block text-[12px] text-muted">{hint}</span>
+        <span className="mt-1.5 block text-micro text-muted">{hint}</span>
       ) : null}
     </label>
   );
 }
 
 export const inputClass =
-  "w-full min-h-[46px] rounded-[14px] bg-field shadow-inset px-3.5 py-2.5 text-[15px] text-fg placeholder:text-muted outline-none focus:ring-[1.5px] focus:ring-cyan border-0";
+  "w-full min-h-[48px] rounded-field bg-field px-4 py-3 text-body text-fg placeholder:text-muted outline-none transition-[background-color,box-shadow] hover:bg-field-strong focus:bg-surface focus:ring-2 focus:ring-accent-ink border-0 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-coral";
 
-// Segmented control (sunken track, raised selection)
+// Segmented control (soft track, raised white selection)
 export function Seg<T extends string>({
   value,
   options,
@@ -114,7 +131,7 @@ export function Seg<T extends string>({
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-[14px] bg-field p-1 shadow-inset">
+    <div role="radiogroup" aria-label={label} className="flex rounded-full bg-field p-1">
       {options.map((o) => (
         <button
           key={o.value}
@@ -122,8 +139,8 @@ export function Seg<T extends string>({
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`relative min-h-9 flex-1 cursor-pointer rounded-[10px] px-1 text-[13px] font-medium transition-colors ${
-            value === o.value ? "bg-surface text-fg shadow-raise" : "text-muted"
+          className={`relative min-h-10 flex-1 cursor-pointer rounded-full px-2 text-small font-semibold transition-[background-color,color,box-shadow] ${
+            value === o.value ? "bg-surface text-fg shadow-raise" : "text-muted hover:text-fg"
           }`}
         >
           {o.label}
@@ -141,12 +158,10 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative h-[23px] w-10 shrink-0 cursor-pointer rounded-full ${checked ? "bg-grad" : "bg-field shadow-inset"}`}
+      className={`relative h-[26px] w-11 shrink-0 cursor-pointer rounded-full transition-colors ${checked ? "bg-accent" : "bg-field-strong"}`}
     >
       <span
-        className={`absolute top-[3px] size-[17px] rounded-full transition-[left] duration-150 ${
-          checked ? "left-5 bg-white" : "left-[3px] bg-muted"
-        }`}
+        className={`absolute top-[3px] size-5 rounded-full bg-white shadow-raise transition-[left] duration-150 ${checked ? "left-[21px]" : "left-[3px]"}`}
       />
     </button>
   );
@@ -154,17 +169,17 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
 
 export type Tone = "amber" | "cyan" | "violet" | "green" | "coral" | "muted";
 const TONE: Record<Tone, string> = {
-  amber: "text-amber bg-amber/15",
-  cyan: "text-cyan bg-cyan/15",
-  violet: "text-violet bg-violet/15",
-  green: "text-green bg-green/15",
-  coral: "text-coral bg-coral/15",
-  muted: "text-muted bg-muted/15",
+  amber: "text-amber bg-amber/12",
+  cyan: "text-cyan bg-cyan/12",
+  violet: "text-violet bg-violet/12",
+  green: "text-green bg-green/12",
+  coral: "text-coral bg-coral/12",
+  muted: "text-muted bg-field",
 };
 
 export function StatusPill({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
-    <span className={`inline-block rounded-full px-[9px] py-1 text-[11.5px] leading-none font-semibold whitespace-nowrap ${TONE[tone]}`}>
+    <span className={`inline-block rounded-full px-2.5 py-[5px] text-micro leading-none font-semibold whitespace-nowrap ${TONE[tone]}`}>
       {children}
     </span>
   );
@@ -173,16 +188,29 @@ export function StatusPill({ tone, children }: { tone: Tone; children: ReactNode
 export function EmptyState({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center px-8 py-16 text-center">
-      <div className="mb-4 grid size-16 place-items-center rounded-[22px] bg-surface text-cyan shadow-raise">{icon}</div>
-      <p className="font-display text-lg font-semibold">{title}</p>
-      {children && <div className="mt-2 max-w-xs text-[14px] text-muted">{children}</div>}
+      <div className="mb-5 grid size-[72px] place-items-center rounded-full bg-surface text-accent-ink shadow-raise">{icon}</div>
+      <p className="font-display text-heading font-medium">{title}</p>
+      {children && <div className="mt-2 max-w-sm text-small text-muted">{children}</div>}
     </div>
   );
 }
 
 // A raised card (the app's main container)
 export function Card({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`rounded-[20px] bg-surface shadow-raise ${className}`}>{children}</div>;
+  return <div className={`rounded-card bg-surface shadow-raise ${className}`}>{children}</div>;
+}
+
+// A red count bubble on an icon (unread chats, deals waiting on you)
+export function CountBadge({ count, label, className = "" }: { count: number; label: string; className?: string }) {
+  if (!count) return null;
+  return (
+    <span
+      className={`grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] leading-none font-bold text-on-accent ring-2 ring-surface ${className}`}
+    >
+      {count}
+      <span className="sr-only"> {label}</span>
+    </span>
+  );
 }
 
 // ---------- toasts ----------
@@ -198,12 +226,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-[max(env(safe-area-inset-top),16px)] z-50 flex justify-center px-4">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-[max(env(safe-area-inset-top),16px)] z-[60] flex justify-center px-4 md:top-20">
         {toast && (
           <div
             key={toast.key}
-            className={`rounded-2xl px-4 py-3 text-[14px] font-semibold text-white shadow-raise ${
-              toast.tone === "error" ? "bg-[#c33b3b]" : "bg-grad"
+            className={`animate-pop-in rounded-full px-5 py-3 text-small font-semibold shadow-pop ${
+              toast.tone === "error" ? "bg-grad" : "bg-fg text-bg"
             }`}
           >
             {toast.msg}

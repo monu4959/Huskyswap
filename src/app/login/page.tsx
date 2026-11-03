@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Check } from "lucide-react";
-import { Mark, PhoneFrame, Splash } from "@/components/AppShell";
+import { Logo, Splash } from "@/components/AppShell";
+import { Husky } from "@/components/Husky";
 import { Button, Field, inputClass, useToast } from "@/components/ui";
 import { isNuEmail } from "@/lib/constants";
 import { ActionError, useStore } from "@/lib/store";
@@ -122,19 +123,40 @@ export default function LoginPage() {
   const boxes = Math.max(6, code.length);
 
   return (
-    <PhoneFrame>
-      <main className="flex min-h-dvh flex-col px-5 pt-[max(env(safe-area-inset-top),20px)] pb-8">
-        <div className="relative mt-1 mb-6 h-[156px]">
-          <div className="plane absolute inset-0 [clip-path:polygon(0_22%,100%_0,100%_78%,0_100%)]" />
-          <span className="absolute top-1/2 left-1/2 grid size-[76px] -translate-1/2 place-items-center rounded-[24px] bg-bg shadow-[0_16px_30px_-12px_rgba(8,11,19,0.6)]">
-            <Mark className="size-9" stroke="url(#hs-grad)" />
-          </span>
+    <main className="flex min-h-dvh flex-col bg-bg md:grid md:grid-cols-2 lg:grid-cols-[1.05fr_1fr]">
+      {/* brand side: a calm intro with the husky (a compact header on phones) */}
+      <div className="relative overflow-hidden px-6 pt-[calc(max(env(safe-area-inset-top),16px)+12px)] pb-6 md:m-4 md:flex md:flex-col md:rounded-sheet md:bg-surface md:p-12 md:shadow-raise lg:p-16">
+        <Logo className="text-[24px] md:text-[26px]" />
+        <div className="mt-10 md:my-auto md:pt-10">
+          {/* the headline lives here until the name step, which asks its own question */}
+          {step === "name" ? (
+            <p className="font-display max-w-[12ch] text-[2.5rem] leading-[1.04] font-medium tracking-[-0.02em] lg:text-[3.5rem]">Buy, sell and borrow on campus</p>
+          ) : (
+            <h1 className="max-w-[12ch] text-[2.5rem] leading-[1.04] lg:text-[3.5rem]">Buy, sell and borrow on campus</h1>
+          )}
+          <p className="mt-4 max-w-[38ch] text-body text-muted md:text-lead">
+            The marketplace for Northeastern students. Textbooks, dorm gear and bikes from people on your campus.
+          </p>
+          <ul className="mt-8 hidden gap-3 text-small md:grid">
+            {["Only @northeastern.edu accounts", "Meet at campus spots, pay in person", "Rent things for a week, deposit back on return"].map((t) => (
+              <li key={t} className="flex items-center gap-2.5">
+                <span className="grid size-6 place-items-center rounded-full bg-accent-soft text-accent-ink">
+                  <Check className="size-3.5" strokeWidth={2.5} aria-hidden />
+                </span>
+                {t}
+              </li>
+            ))}
+          </ul>
         </div>
+        <Husky className="pointer-events-none absolute right-6 bottom-0 hidden size-52 md:block lg:size-60" />
+      </div>
 
+      <div className="flex items-start justify-center px-6 pb-10 md:items-center md:px-10">
+        <div className="w-full max-w-[420px] md:rounded-sheet md:bg-surface md:p-8 md:shadow-raise">
         {step === "name" ? (
           <form onSubmit={submitName} noValidate className="space-y-4">
-            <h1 className="text-[23px] leading-tight font-bold">What should we call you?</h1>
-            <p className="text-[13.5px] text-muted">Buyers and sellers see this name. You can change it later.</p>
+            <h1 className="text-title">What should we call you?</h1>
+            <p className="text-small text-muted">Buyers and sellers see this name. You can change it later.</p>
             <Field label="Display name" error={error}>
               <input autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} className={inputClass} aria-invalid={!!error} />
             </Field>
@@ -144,8 +166,7 @@ export default function LoginPage() {
           </form>
         ) : (
           <>
-            <h1 className="text-[23px] leading-tight font-bold">Buy, sell and borrow on campus</h1>
-            <p className="mt-2 mb-5 text-[13.5px] text-muted">
+            <p className="mb-5 text-body text-muted">
               Only for Northeastern students. Sign in with your school email and we&apos;ll send you a code.
             </p>
 
@@ -170,7 +191,7 @@ export default function LoginPage() {
               </form>
             ) : (
               <form onSubmit={submitCode} noValidate>
-                <span className="mb-[7px] block text-[12.5px] font-semibold text-muted">Northeastern email</span>
+                <span className="mb-2 block text-small font-semibold">Northeastern email</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -181,14 +202,14 @@ export default function LoginPage() {
                   className={`${inputClass} flex cursor-pointer items-center justify-between text-left`}
                 >
                   <span className="truncate">{email}</span>
-                  <span className="text-[12.5px] font-semibold text-cyan">Change</span>
+                  <span className="text-small font-semibold text-accent-ink">Change</span>
                 </button>
                 {DEMO_LOGIN ? (
-                  <p className="mt-2.5 mb-3 rounded-xl bg-cyan/15 px-3 py-2 text-[12.5px] text-cyan">
+                  <p className="mt-3 mb-4 rounded-field bg-accent-soft px-3.5 py-2.5 text-small text-accent-ink">
                     Demo mode: no email is sent. Enter any 6 digits to sign in.
                   </p>
                 ) : (
-                  <p className="mt-2.5 mb-3 flex items-center gap-1.5 text-[12.5px] text-green">
+                  <p className="mt-2.5 mb-3 flex items-center gap-1.5 text-small text-green">
                     <Check className="size-4" aria-hidden />
                     Code sent. Check your inbox (and spam).
                   </p>
@@ -210,9 +231,9 @@ export default function LoginPage() {
                     {Array.from({ length: boxes }, (_, i) => (
                       <span
                         key={i}
-                        className={`font-display grid h-12 place-items-center rounded-[13px] bg-field text-[19px] font-semibold shadow-inset ${
+                        className={`grid h-14 place-items-center rounded-field bg-field text-[1.6rem] font-bold ${
                           i === Math.min(code.length, boxes - 1)
-                            ? "group-focus-within:outline-[1.5px] group-focus-within:-outline-offset-[1.5px] group-focus-within:outline-cyan"
+                            ? "group-focus-within:bg-surface group-focus-within:outline-2 group-focus-within:-outline-offset-2 group-focus-within:outline-accent-ink"
                             : ""
                         }`}
                       >
@@ -221,11 +242,11 @@ export default function LoginPage() {
                     ))}
                   </span>
                 </label>
-                {error && <p className="mb-2 text-[12.5px] text-coral">{error}</p>}
+                {error && <p className="mb-2 text-small text-coral">{error}</p>}
                 <Button type="submit" className="mt-3 w-full" disabled={busy}>
                   {busy ? "Checking…" : "Verify and continue"}
                 </Button>
-                <p className="mt-4 text-center text-[13px] text-muted">
+                <p className="mt-4 text-center text-small text-muted">
                   Didn&apos;t get it?{" "}
                   {cooldown > 0 ? (
                     <span>Resend in {cooldown}s</span>
@@ -239,8 +260,11 @@ export default function LoginPage() {
             )}
           </>
         )}
-      </main>
-    </PhoneFrame>
+          {/* on phones the husky greets you under the form */}
+          <Husky animated className="mx-auto mt-12 size-28 md:hidden" />
+        </div>
+      </div>
+    </main>
   );
 }
 

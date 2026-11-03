@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ReceiptText } from "lucide-react";
 import { DealRow } from "@/components/DealRow";
-import { EmptyState, Seg } from "@/components/ui";
+import { EmptyState, PageTitle, Seg, narrowClass } from "@/components/ui";
 import { useStore } from "@/lib/store";
 
 type Side = "buying" | "selling";
@@ -29,14 +29,14 @@ export default function DealsPage() {
   const label = (text: string, n: number) => (
     <>
       {text}
-      {n > 0 && <span className="ml-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-[#FF7A7A] px-1 text-[10px] font-bold text-white">{n}</span>}
+      {n > 0 && <span className="ml-1.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] font-bold text-on-accent">{n}</span>}
     </>
   );
 
   return (
-    <main className="px-5 pt-[max(env(safe-area-inset-top),16px)] pb-32">
-      <h1 className="mt-1.5 mb-3.5 text-[24px] font-bold">Deals</h1>
-      <div className="mb-4">
+    <main className={`${narrowClass} pb-36 md:pb-24`}>
+      <PageTitle title="Deals" sub="Requests to buy and rent, from first message to handover" />
+      <div className="mb-5">
         <Seg<Side>
           label="Deals"
           value={side}
@@ -52,13 +52,13 @@ export default function DealsPage() {
           {side === "buying" ? (
             <>
               Find something and tap Request.{" "}
-              <Link href="/" className="font-semibold text-cyan">
+              <Link href="/" className="font-semibold text-accent-ink">
                 Browse listings
               </Link>
             </>
           ) : (
             <>
-              <Link href="/sell" className="font-semibold text-cyan">
+              <Link href="/sell" className="font-semibold text-accent-ink">
                 Post a listing
               </Link>{" "}
               and requests show up here.
@@ -66,7 +66,7 @@ export default function DealsPage() {
           )}
         </EmptyState>
       ) : (
-        <ul className="space-y-[11px]">
+        <ul className="space-y-3">
           {deals.map((t) => (
             <li key={t.transaction_id}>
               <DealRow deal={t} />
