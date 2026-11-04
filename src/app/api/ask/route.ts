@@ -54,7 +54,8 @@ function doneEvent(run: AgentRun): AskDone {
     status: run.status,
     answer: run.answer,
     clarification: run.clarification,
-    sql: run.status === "answered" ? run.finalSql : null,
+    // An answer shows its SQL, and so does a give-up whose query ran but found nothing
+    sql: run.status === "answered" || (run.status === "gave_up" && run.result?.ok && run.result.rowCount === 0) ? run.finalSql : null,
     columns: result?.columns ?? [],
     rows: result?.rows.slice(0, ROWS_SENT) ?? [],
     rowCount: result?.rowCount ?? 0,

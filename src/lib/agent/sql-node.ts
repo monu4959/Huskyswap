@@ -70,6 +70,7 @@ export type SqlOutcome = {
   reason: string | null; // why it was refused
   messages: ChatMessage[];
   sqlErrors: number;
+  lastError: string | null; // the last guard or database error, to explain a give-up
 };
 
 // Compact JSON for the model: first rows only, long cells cut
@@ -100,7 +101,7 @@ export async function sqlNode(input: {
     { role: "system", content: sqlSystem(role, input.today) },
     { role: "user", content: sqlUser(input.question, input.ctx) },
   ];
-  const out: SqlOutcome = { status: "gave_up", sql: null, result: null, reason: null, messages, sqlErrors: 0 };
+  const out: SqlOutcome = { status: "gave_up", sql: null, result: null, reason: null, messages, sqlErrors: 0, lastError: null };
   let lookups = 0;
   let lastOk: { sql: string; result: SqlResult } | null = null;
   let submitted: { sql: string; result: SqlResult } | null = null; // last submit_sql that ran (even if empty)
@@ -152,8 +153,10 @@ export async function sqlNode(input: {
     if (call.function.name === "run_sql") {
       if (typeof args.sql !== "string") return { content: JSON.stringify({ error: "sql must be a string." }) };
       const result = await run(args.sql);
-      if (!result.ok) out.sqlErrors++;
-      else lastOk = { sql: args.sql, result };
+      if (!result.ok) {
+        out.sqlErrors++;
+        out.lastError = result.error;
+      } else lastOk = { sql: args.sql, result };
       const content = forModel(result);
       seen.set(key, content);
       return { content };
@@ -169,6 +172,7 @@ export async function sqlNode(input: {
       const result = await run(args.sql);
       if (!result.ok) {
         out.sqlErrors++;
+        out.lastError = result.error;
         return { content: JSON.stringify({ error: `Not accepted: ${result.error}` }) };
       }
       lastOk = { sql: args.sql, result };

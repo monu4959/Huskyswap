@@ -22,9 +22,9 @@ import { logRun, type RunMeta } from "./log.ts";
 import { scrubText } from "./privacy.ts";
 import { PROMPT_VERSION, bostonToday } from "./prompt.ts";
 import { retrieve, summarize } from "./retrieve.ts";
-import { SCHEMA_HASH } from "./schema-card.ts";
+import { SCHEMA_CARD, SCHEMA_HASH } from "./schema-card.ts";
 import { SEMANTIC_VERSION } from "./semantic-layer.ts";
-import { sqlNode } from "./sql-node.ts";
+import { SQL_LIMITS, sqlNode, type SqlOutcome } from "./sql-node.ts";
 import type { AgentRun, ChatMessage, ClarificationTurn, DbRole, NodeName } from "./types.ts";
 
 // Time counts work, not waiting out rate limits (the app is still capped by the
@@ -54,6 +54,19 @@ export type RunOptions = {
 class BudgetExceeded extends Error {}
 
 const GAVE_UP = "I couldn't work out a reliable query for that. Try rephrasing it or narrowing it down.";
+
+// Why a run ended without an answer, in plain words. The run still counts as gave_up.
+const WHY = {
+  nothingMatched:
+    "I searched, but nothing matched. If you asked about a time like \"this week\" or \"today\", there may be no listings from then. Try a wider range or fewer filters.",
+  unsureEmpty: "(I couldn't double-check my filters, so if you expected results, try rewording the question.)",
+  notAllowedStudent:
+    "I can't answer that with a student account. Students can see listings and their own activity; marketplace-wide numbers and other students' data are admin-only.",
+  notAllowed: "That needs data the assistant isn't allowed to read: for privacy it only sees the marketplace views, not the raw tables.",
+  queriesFailed: "Every query I tried was rejected, so I can't give a reliable answer. Try rephrasing it or narrowing it down.",
+  busy: "The AI service is at its rate limit right now, so I ran out of time on this one. Try again in a minute.",
+  tooLong: "That took too many steps to work out. Try a simpler or narrower question.",
+};
 
 export async function runAgent(opts: RunOptions): Promise<AgentRun> {
   const model = opts.model ?? teacherConfig();
@@ -190,7 +203,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     }
     if (sql.status !== "answered" || !sql.result?.ok) {
       run.status = "gave_up";
-      run.answer = GAVE_UP;
+      run.answer = await whyNoAnswer(sql, resolved);
       return await finish();
     }
 
@@ -205,10 +218,38 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     run.status = "answered";
   } catch (e) {
     run.status = e instanceof BudgetExceeded ? "gave_up" : "error";
-    run.answer = e instanceof BudgetExceeded ? GAVE_UP : null;
+    // Out of budget: mostly waiting on rate limits (busy), or just too many steps
+    run.answer = e instanceof BudgetExceeded ? (waitedMs > 20_000 ? WHY.busy : WHY.tooLong) : null;
     run.error = (e as Error).message;
   }
   return await finish();
+
+  // The SQL node ended without an answer: say why, from what its queries returned
+  async function whyNoAnswer(sql: SqlOutcome, question: string): Promise<string> {
+    if (sql.sql && sql.result?.ok && sql.result.rowCount === 0) {
+      // A valid query that found nothing: in the app, let the answer node say what was
+      // searched for ("no textbooks were listed this week"). Evals keep the plain text
+      // so their token counts stay comparable.
+      if (opts.source === "app") {
+        try {
+          const ans = await writeAnswer({ question, sql: sql.sql, result: sql.result, today, call: caller("answer") });
+          if (ans.answer) return `${scrubText(ans.answer)}\n\n${WHY.unsureEmpty}`;
+        } catch {
+          // out of budget or the model failed: fall through to the plain explanation
+        }
+      }
+      return WHY.nothingMatched;
+    }
+    const error = sql.lastError ?? "";
+    // Reached past the allowed views: raw tables, or a view this role can't see
+    const unknown = /Unknown view "([^"]+)"/.exec(error)?.[1];
+    const otherRolesView = unknown && SCHEMA_CARD.some((v) => v.name === unknown && !v.roles.includes(opts.role));
+    if (/Only nlq views can be queried/.test(error) || otherRolesView) {
+      return opts.role === "nlq_student" ? WHY.notAllowedStudent : WHY.notAllowed;
+    }
+    if (sql.sqlErrors >= SQL_LIMITS.failures) return WHY.queriesFailed;
+    return GAVE_UP;
+  }
 
   async function finish() {
     run.latencyMs = Math.round(performance.now() - started);

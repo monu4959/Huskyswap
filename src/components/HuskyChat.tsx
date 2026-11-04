@@ -12,7 +12,7 @@ import type { ClarificationTurn } from "@/lib/agent/types";
 export const ASSISTANT_NAME = "Ask HuskySwap";
 
 const EXAMPLES = {
-  student: ["Cheapest textbooks this week", "Any mini fridges for rent at Curry?", "What's free right now?", "How much have I earned from selling?"],
+  student: ["Cheapest textbooks for sale", "Any mini fridges for rent at Curry?", "What's free right now?", "How much have I earned from selling?"],
   admin: [
     "How many rentals came back late during spring 2025 move-out?",
     "Top 5 meetup spots by completed deals",
