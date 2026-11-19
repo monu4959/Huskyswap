@@ -1,0 +1,52 @@
+{
+  "candidate": "stage2-r3",
+  "baseline": "stage2-r2",
+  "evalSet": "eval-v1-pilot",
+  "ranAt": "2026-11-03T00:37:05.730Z",
+  "runs": "new runs",
+  "passed": true,
+  "checks": [
+    {
+      "name": "no errors",
+      "passed": true,
+      "detail": "0 errored item(s) across 3 run(s)"
+    },
+    {
+      "name": "overall",
+      "passed": true,
+      "detail": "94% vs production 89.3% (margin 3)"
+    },
+    {
+      "name": "SQL",
+      "passed": true,
+      "detail": "execution accuracy 92.5% vs production 86.7% (margin 5)"
+    },
+    {
+      "name": "refusals",
+      "passed": true,
+      "detail": "keeps all 6 that production gets right"
+    },
+    {
+      "name": "clarifications",
+      "passed": true,
+      "detail": "keeps all 4 that production gets right"
+    },
+    {
+      "name": "tokens",
+      "passed": true,
+      "detail": "3463 tokens per question vs production 3609 (limit 1.5x)"
+    }
+  ],
+  "reports": {
+    "candidate": [
+      "2026-11-03-gate-stage2-r3-run1.json",
+      "2026-11-03-gate-stage2-r3-run2.json",
+      "2026-11-03-gate-stage2-r3-run3.json"
+    ],
+    "baseline": [
+      "2026-10-25-student-stage2-r2-run1.json",
+      "2026-10-25-student-stage2-r2-run2.json",
+      "2026-10-25-student-stage2-r2-run3.json"
+    ]
+  }
+}
