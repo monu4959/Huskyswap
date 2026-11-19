@@ -11,11 +11,17 @@
 // registry (src/lib/agent/serving.ts): production, a canary candidate, or the
 // teacher when the student's server is down. Every question is logged in
 // ops.agent_runs.
+//
+// Limits per student: one question at a time, PER_MINUTE and PER_DAY. A slot is
+// reserved in ops.ask_quota before the run starts (src/lib/agent/log.ts), so
+// parallel requests can't slip past the limits. If the client disconnects, the
+// run stops before its next model call.
 
 import { askerFrom } from "@/lib/agent/auth";
 import { runAgent, type GraphEvent } from "@/lib/agent/graph";
 import type { ModelConfig } from "@/lib/agent/llm";
-import { recentAppRuns } from "@/lib/agent/log";
+import { finishAsk, reserveAsk } from "@/lib/agent/log";
+import { scrubDetail } from "@/lib/agent/privacy";
 import { fallback, markDown, route } from "@/lib/agent/serving";
 import type { AgentRun, Clarification, ClarificationTurn } from "@/lib/agent/types";
 
@@ -25,6 +31,11 @@ export const maxDuration = 120;
 const PER_MINUTE = 3;
 const PER_DAY = 40;
 const ROWS_SENT = 50;
+
+// Node details carry guard and database messages, which can quote row values: masked and cut short
+function nodeEvent(e: GraphEvent): AskNode {
+  return { type: "node", ...e, ...(e.detail !== undefined ? { detail: scrubDetail(e.detail) } : {}) };
+}
 
 export type AskNode = { type: "node" } & GraphEvent;
 
@@ -85,25 +96,51 @@ export async function POST(request: Request) {
     return Response.json({ error: "Ask a question between 3 and 500 characters." }, { status: 400 });
   }
 
-  const recent = await recentAppRuns(asker.userId);
-  if (recent.minute >= PER_MINUTE) return Response.json({ error: "One moment: try again in a minute." }, { status: 429 });
-  if (recent.day >= PER_DAY) return Response.json({ error: "That's today's limit. Ask again tomorrow." }, { status: 429 });
+  let reservation;
+  try {
+    reservation = await reserveAsk(asker.userId, { perMinute: PER_MINUTE, perDay: PER_DAY });
+  } catch (e) {
+    console.error("ask: couldn't reserve a slot:", e);
+    return Response.json({ error: "The assistant is unavailable right now. Try again in a minute." }, { status: 503 });
+  }
+  if (!reservation.ok) {
+    const error = { busy: "One question at a time: wait for the current answer.", minute: "One moment: try again in a minute.", day: "That's today's limit. Ask again tomorrow." }[reservation.reason];
+    return Response.json({ error }, { status: 429 });
+  }
+  const slot = reservation.id;
+  const signal = request.signal;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: AskNode | AskDone) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      // Once the client has gone, writes fail: drop them and let the run notice the abort
+      const send = (event: AskNode | AskDone) => {
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+        } catch {
+          // stream closed or cancelled
+        }
+      };
       const ask = (model: ModelConfig) =>
-        runAgent({ question, clarifications, role: asker.role, source: "app", userId: asker.userId, model, onEvent: (e) => send({ type: "node", ...e }) });
-      const chosen = await route(asker.userId).catch((e) => fallback(`routing failed: ${e.message}`));
-      let run = await ask(chosen.model);
-      // The student's server went down mid-run: answer with the teacher instead
-      if (run.status === "error" && chosen.arm !== "fallback") {
-        markDown(chosen.model);
-        run = await ask(fallback(`${chosen.modelId} failed: ${run.error}`).model);
+        runAgent({ question, clarifications, role: asker.role, source: "app", userId: asker.userId, model, signal, onEvent: (e) => send(nodeEvent(e)) });
+      let run: AgentRun | null = null;
+      try {
+        const chosen = await route(asker.userId).catch((e) => fallback(`routing failed: ${e.message}`));
+        run = await ask(chosen.model);
+        // The student's server went down mid-run: answer with the teacher instead (not if the client left)
+        if (run.status === "error" && chosen.arm !== "fallback" && !signal.aborted) {
+          markDown(chosen.model);
+          run = await ask(fallback(`${chosen.modelId} failed: ${run.error}`).model);
+        }
+        send(doneEvent(run));
+      } finally {
+        await finishAsk(slot, run?.runId ?? null).catch((e) => console.error("ask: couldn't finish the reservation:", e));
+        try {
+          controller.close();
+        } catch {
+          // already closed by the client
+        }
       }
-      send(doneEvent(run));
-      controller.close();
     },
   });
 

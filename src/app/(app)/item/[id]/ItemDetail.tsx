@@ -8,7 +8,7 @@ import { Avatar, Rating } from "@/components/Avatar";
 import { Illustration } from "@/components/ItemArt";
 import { PhotoCreditLine } from "@/components/PhotoCredit";
 import { ReportButton } from "@/components/ReportDialog";
-import { BackButton, Button, EmptyState, StatusPill, TopBar, buttonClass, pageClass, roundClass, useAction, type Tone } from "@/components/ui";
+import { BackButton, Button, EmptyState, StatusPill, TopBar, buttonClass, pageClass, radioGroupKeys, roundClass, useAction, type Tone } from "@/components/ui";
 import { CATEGORY_LABEL, CONDITION_LABEL, ITEM_STATUS_LABEL, RENTAL_DAYS, formatPrice } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import { MEETUP_SPOTS } from "@/lib/reference";
@@ -181,9 +181,14 @@ export function ItemDetail({ params }: { params: Promise<{ id: string }> }) {
             {item.status !== "available" && <StatusPill tone="amber">{ITEM_STATUS_LABEL[item.status]}</StatusPill>}
             <StatusPill tone="muted">{CATEGORY_LABEL[item.category]}</StatusPill>
           </div>
-          <h1 className="mt-3 text-title md:text-[2.5rem] md:leading-[1.08]">{item.title}</h1>
+          <h1 className="mt-3 text-title wrap-anywhere md:text-[2.5rem] md:leading-[1.08]">{item.title}</h1>
 
-          <div className={`mt-5 grid gap-2.5 ${both ? "grid-cols-2" : "grid-cols-1"}`} role={both && !mine ? "radiogroup" : undefined} aria-label="Buy or rent">
+          <div
+            className={`mt-5 grid gap-2.5 ${both ? "grid-cols-2" : "grid-cols-1"}`}
+            role={both && !mine ? "radiogroup" : "group"}
+            aria-label="Buy or rent"
+            onKeyDown={both && !mine ? radioGroupKeys : undefined}
+          >
             {item.sale && (
               <Option
                 interactive={both && !mine}
@@ -231,7 +236,7 @@ export function ItemDetail({ params }: { params: Promise<{ id: string }> }) {
             <div className="mt-6 flex items-center gap-3">
               <Avatar name={owner.name} size={44} />
               <div className="min-w-0">
-                <b className="block text-body font-semibold">{mine ? "You" : owner.name}</b>
+                <b className="block text-body font-semibold wrap-anywhere">{mine ? "You" : owner.name}</b>
                 <Rating {...store.ratingFor(owner.id)} />
               </div>
             </div>
@@ -240,7 +245,7 @@ export function ItemDetail({ params }: { params: Promise<{ id: string }> }) {
           {item.description && (
             <section className="mt-6">
               <h2 className="mb-2 text-lead font-semibold">About this item</h2>
-              <p className="text-body leading-relaxed text-muted">{item.description}</p>
+              <p className="text-body leading-relaxed text-muted wrap-anywhere">{item.description}</p>
             </section>
           )}
 
@@ -296,6 +301,7 @@ function Option({
       type="button"
       role="radio"
       aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
       onClick={onSelect}
       className={`${base} cursor-pointer transition-[box-shadow,border-color] ${selected ? "border-grad shadow-raise" : "border-2 border-transparent bg-surface shadow-raise hover:border-line"}`}
     >

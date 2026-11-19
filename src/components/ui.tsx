@@ -4,11 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, X } from "lucide-react";
 import {
+  cloneElement,
   createContext,
+  isValidElement,
   useCallback,
   useContext,
+  useId,
   useState,
   type ButtonHTMLAttributes,
+  type KeyboardEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
 import { ActionError } from "@/lib/store";
@@ -91,6 +96,9 @@ export function PageTitle({ title, sub, children }: { title: string; sub?: React
   );
 }
 
+// A labelled form control. The error (or hint) sits outside the <label> so it isn't read as
+// part of the field's name, and is linked to the control with aria-describedby instead.
+// The control is the single child element; it should set its own aria-invalid.
 export function Field({
   label,
   hint,
@@ -100,23 +108,58 @@ export function Field({
   label: string;
   hint?: string;
   error?: string | null;
-  children: ReactNode;
+  children: ReactElement<{ "aria-describedby"?: string }>;
 }) {
+  const noteId = useId();
+  const note = error || hint;
+  const control = note && isValidElement(children) ? cloneElement(children, { "aria-describedby": noteId }) : children;
   return (
-    <label className="block">
-      <span className="mb-2 block text-small font-semibold text-fg">{label}</span>
-      {children}
+    <div>
+      <label className="block">
+        <span className="mb-2 block text-small font-semibold text-fg">{label}</span>
+        {control}
+      </label>
       {error ? (
-        <span className="mt-1.5 block text-small text-coral">{error}</span>
+        <span id={noteId} className="mt-1.5 block text-small text-coral">
+          {error}
+        </span>
       ) : hint ? (
-        <span className="mt-1.5 block text-micro text-muted">{hint}</span>
+        <span id={noteId} className="mt-1.5 block text-micro text-muted">
+          {hint}
+        </span>
       ) : null}
-    </label>
+    </div>
   );
 }
 
 export const inputClass =
   "w-full min-h-[48px] rounded-field bg-field px-4 py-3 text-body text-fg placeholder:text-muted outline-none transition-[background-color,box-shadow] hover:bg-field-strong focus:bg-surface focus:ring-2 focus:ring-accent-ink border-0 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-coral";
+
+// Arrow keys, Home and End move between the radios of a radiogroup and select the one they
+// land on (WAI-ARIA radio group pattern). Pair with radioTabIndex so only one radio is a Tab stop.
+export function radioGroupKeys(e: KeyboardEvent<HTMLElement>) {
+  const radios = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]:not(:disabled)')];
+  const i = radios.indexOf(e.target as HTMLElement);
+  if (i < 0) return;
+  const n = radios.length;
+  const to =
+    e.key === "ArrowRight" || e.key === "ArrowDown"
+      ? (i + 1) % n
+      : e.key === "ArrowLeft" || e.key === "ArrowUp"
+        ? (i - 1 + n) % n
+        : e.key === "Home"
+          ? 0
+          : e.key === "End"
+            ? n - 1
+            : -1;
+  if (to < 0) return;
+  e.preventDefault();
+  radios[to].focus();
+  radios[to].click();
+}
+
+// Roving tabindex: the checked radio is the group's Tab stop, or the first one when none is checked
+export const radioTabIndex = (checked: boolean, index: number, anyChecked: boolean) => (checked || (!anyChecked && index === 0) ? 0 : -1);
 
 // Segmented control (soft track, raised white selection)
 export function Seg<T extends string>({
@@ -124,20 +167,33 @@ export function Seg<T extends string>({
   options,
   onChange,
   label,
+  invalid,
+  describedBy,
 }: {
   value: T;
   options: { value: T; label: ReactNode }[];
   onChange: (v: T) => void;
   label: string;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
+  const anyChecked = options.some((o) => o.value === value);
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-full bg-field p-1">
-      {options.map((o) => (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
+      onKeyDown={radioGroupKeys}
+      className="flex rounded-full bg-field p-1"
+    >
+      {options.map((o, i) => (
         <button
           key={o.value}
           type="button"
           role="radio"
           aria-checked={value === o.value}
+          tabIndex={radioTabIndex(value === o.value, i, anyChecked)}
           onClick={() => onChange(o.value)}
           className={`relative min-h-10 flex-1 cursor-pointer rounded-full px-2 text-small font-semibold transition-[background-color,color,box-shadow] ${
             value === o.value ? "bg-surface text-fg shadow-raise" : "text-muted hover:text-fg"
@@ -150,13 +206,27 @@ export function Seg<T extends string>({
   );
 }
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Switch({
+  checked,
+  onChange,
+  label,
+  invalid,
+  describedBy,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  invalid?: boolean;
+  describedBy?: string;
+}) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       onClick={() => onChange(!checked)}
       className={`relative h-[26px] w-11 shrink-0 cursor-pointer rounded-full transition-colors ${checked ? "bg-accent" : "bg-field-strong"}`}
     >
@@ -230,7 +300,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toast && (
           <div
             key={toast.key}
-            className={`animate-pop-in rounded-full px-5 py-3 text-small font-semibold shadow-pop ${
+            className={`animate-pop-in rounded-full px-5 py-3 text-small font-semibold shadow-pop wrap-anywhere ${
               toast.tone === "error" ? "bg-grad" : "bg-fg text-bg"
             }`}
           >

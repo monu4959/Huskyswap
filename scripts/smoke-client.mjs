@@ -9,12 +9,16 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
 
-const env = Object.fromEntries(
-  readFileSync(new URL("../.env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => /^[A-Z_]+=/.test(l))
-    .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim()]),
-);
+// Values already in the environment win (scripts/test-env.mjs points them at the local stack).
+const env = {
+  ...Object.fromEntries(
+    readFileSync(new URL("../.env.local", import.meta.url), "utf8")
+      .split(/\r?\n/)
+      .filter((l) => /^[A-Z_]+=/.test(l))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim()]),
+  ),
+  ...process.env,
+};
 const db = new pg.Client({ connectionString: env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await db.connect();
 

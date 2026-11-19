@@ -9,10 +9,15 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".next-test/**", // test build (npm run test:env)
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "test-results/**", // Playwright output (npm run test:e2e)
+    "playwright-report/**",
   ]),
+  // CommonJS preload for the test wrapper: require() is the point
+  { files: ["scripts/*.cjs"], rules: { "@typescript-eslint/no-require-imports": "off" } },
 ]);
 
 export default eslintConfig;

@@ -36,12 +36,35 @@ export function parseJson(text: string | null): Record<string, unknown> | null {
 const OTHER_PEOPLE =
   /\b(?:the|that|this|whose|other|another)\s+(?:seller|buyer|lender|borrower|student|person|user|owner)s?\b|\bsomeone(?: else)?'?s?\b|\bother (?:students|people|users)\b/i;
 
-// "the payments table", "view transactions_archive": a table or view name that isn't in the schema
+// "the payments table", "view transactions_archive", "the table called orders": a table or
+// view name that isn't in the schema. A name counts when it looks like an identifier
+// (underscore, digit or schema dot), follows "called"/"named", or sits between a
+// determiner and the keyword ("the payments table"); furniture ("which coffee tables",
+// "the coffee table", "table lamp") and the verb "view" ("view bikes for sale") don't.
+const IDENTIFIER = /[_\d.]/;
+const NOT_A_NAME = new Set(["the", "a", "an", "this", "that", "these", "those", "of", "my", "your", "our", "its", "their", "data", "any", "which", "what", "each", "every", "same", "other"]);
+const FURNITURE = new Set([
+  "coffee", "dining", "kitchen", "side", "end", "folding", "foldable", "picnic", "bedside", "night", "study", "desk", "computer", "card",
+  "pool", "tennis", "work", "accent", "console", "patio", "outdoor", "glass", "wood", "wooden", "round", "square", "small", "big", "ikea",
+]);
 function namesMissingTable(question: string) {
-  const names = [...question.toLowerCase().matchAll(/\b([a-z_]+)\s+(?:table|view)s?\b|\b(?:table|view)s?\s+(?:called\s+|named\s+)?([a-z_]+)\b/g)]
-    .map((m) => m[1] ?? m[2])
-    .filter((n) => n && !["the", "a", "this", "that", "of", "my", "your", "data"].includes(n));
-  return names.some((n) => !SCHEMA_CARD.some((v) => v.name === n || v.name === n.replace(/^nlq\./, "")));
+  const q = question.toLowerCase();
+  const names: string[] = [];
+  // "<determiner> <name> table(s)/view(s)", or an identifier-looking name before the keyword
+  for (const m of q.matchAll(/(?:\b(the|a|an|this|that|my|your|our|its)\s+)?\b([a-z_][a-z0-9_.]*)\s+(?:table|view)s?\b/g)) {
+    const [, determiner, name] = m;
+    if (NOT_A_NAME.has(name)) continue;
+    if (IDENTIFIER.test(name) || (determiner && !FURNITURE.has(name))) names.push(name);
+  }
+  // "table/view called <name>", or an identifier-looking name after the keyword
+  for (const m of q.matchAll(/\b(?:table|view)s?\s+(called\s+|named\s+)?([a-z_][a-z0-9_.]*)/g)) {
+    const [, called, name] = m;
+    if (NOT_A_NAME.has(name)) continue;
+    if (called || IDENTIFIER.test(name)) names.push(name);
+  }
+  return names
+    .map((n) => n.replace(/\.+$/, "").replace(/^nlq\./, ""))
+    .some((n) => n && !SCHEMA_CARD.some((v) => v.name === n));
 }
 
 function fallbackResolved(question: string, clarifications: ClarificationTurn[]) {

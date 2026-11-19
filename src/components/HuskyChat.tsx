@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Check, LoaderCircle, SendHorizontal, ThumbsDown, ThumbsUp, TriangleAlert, X, Zap } from "lucide-react";
 import { Husky, PawTyping } from "@/components/Husky";
 import { supabase } from "@/lib/supabase";
@@ -186,7 +186,7 @@ export function ChatThread({ chat, inputRef }: { chat: Chat; inputRef?: RefObjec
 
         {turns.map((turn) => (
           <section key={turn.id} className="flex flex-col gap-3" aria-label={turn.shown}>
-            <p className="ml-auto max-w-[85%] rounded-[20px] rounded-br-md bg-grad px-4 py-2.5 text-small leading-snug whitespace-pre-line">{turn.shown}</p>
+            <p className="ml-auto max-w-[85%] rounded-[20px] rounded-br-md bg-grad px-4 py-2.5 text-small leading-snug whitespace-pre-line wrap-anywhere">{turn.shown}</p>
 
             {!turn.done && !turn.error && (
               <FromHusky>
@@ -219,7 +219,7 @@ export function ChatThread({ chat, inputRef }: { chat: Chat; inputRef?: RefObjec
 
             {turn.done?.status === "clarify" && turn.done.clarification && (
               <FromHusky>
-                <p className="leading-snug">{turn.done.clarification.question}</p>
+                <p className="leading-snug wrap-anywhere">{turn.done.clarification.question}</p>
                 {turn === pending && (
                   <div className="mt-2.5 flex flex-wrap gap-2">
                     {turn.done.clarification.options.map((o) => (
@@ -246,7 +246,7 @@ export function ChatThread({ chat, inputRef }: { chat: Chat; inputRef?: RefObjec
                       <Zap className="size-3.5" /> Instant answer from a matching past question
                     </span>
                   )}
-                  <p className="leading-snug whitespace-pre-line">{turn.done.error ?? turn.done.answer ?? "I couldn't find an answer to that."}</p>
+                  <p className="leading-snug whitespace-pre-line wrap-anywhere">{turn.done.error ?? turn.done.answer ?? "I couldn't find an answer to that."}</p>
 
                   {turn.done.rows.length > 0 && (
                     <div className="overflow-x-auto rounded-xl bg-surface p-2">
@@ -373,6 +373,18 @@ export function ChatThread({ chat, inputRef }: { chat: Chat; inputRef?: RefObjec
 const NO_LAUNCHER = [/^\/ask/, /^\/inbox\/.+/];
 const HINT_KEY = "huskyswap-husky-hint";
 
+// Below Tailwind's md breakpoint the panel is full screen (a modal); above it, a floating card
+// beside a page that stays usable (a non-modal dialog the launcher also closes)
+const PHONE = "(width < 48rem)";
+const subscribePhone = (onChange: () => void) => {
+  const m = matchMedia(PHONE);
+  m.addEventListener("change", onChange);
+  return () => m.removeEventListener("change", onChange);
+};
+const usePhone = () => useSyncExternalStore(subscribePhone, () => matchMedia(PHONE).matches, () => false);
+
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
 // The floating husky in the bottom-right corner and the chat panel it opens
 export function HuskyAssistant() {
   const pathname = usePathname();
@@ -389,7 +401,10 @@ export function HuskyAssistant() {
   const [hintReady, setHintReady] = useState(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef(false); // closed by the user: put focus back on the launcher
   const hidden = NO_LAUNCHER.some((r) => r.test(pathname));
+  const modal = usePhone();
 
   // The speech bubble appears a moment after the page settles
   useEffect(() => {
@@ -407,23 +422,50 @@ export function HuskyAssistant() {
   };
 
   const close = () => {
+    restoreFocus.current = true;
     setOpen(false);
-    launcherRef.current?.focus();
   };
 
-  // Escape closes the panel; opening it focuses the question box
+  // Escape closes the panel; opening it focuses the question box. Closing returns focus to the
+  // launcher once it has rendered again (on phones it is display:none while the panel is open).
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      if (restoreFocus.current) {
+        restoreFocus.current = false;
+        launcherRef.current?.focus();
+      }
+      return;
+    }
     inputRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        restoreFocus.current = true;
         setOpen(false);
-        launcherRef.current?.focus();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // Full screen on phones, so Tab and Shift+Tab stay inside the panel like any modal
+  useEffect(() => {
+    if (!open || !modal) return;
+    const onKey = (e: KeyboardEvent) => {
+      const panel = panelRef.current;
+      if (e.key !== "Tab" || !panel) return;
+      const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (!panel.contains(active) || (e.shiftKey && active === first) || (!e.shiftKey && active === last)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, modal]);
 
   if (hidden) return null;
 
@@ -431,8 +473,9 @@ export function HuskyAssistant() {
     <>
       {open && (
         <div
+          ref={panelRef}
           role="dialog"
-          aria-modal="true"
+          aria-modal={modal || undefined}
           aria-labelledby="husky-chat-title"
           className="animate-sheet-in fixed inset-0 z-50 flex flex-col bg-bg md:inset-auto md:right-8 md:bottom-[136px] md:h-[600px] md:max-h-[calc(100dvh-170px)] md:w-[400px] md:overflow-hidden md:rounded-sheet md:bg-surface md:shadow-pop"
         >

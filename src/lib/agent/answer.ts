@@ -13,7 +13,9 @@ import type { ChatMessage, SqlResult } from "./types.ts";
 type Call = (messages: ChatMessage[], opts: { json?: boolean }) => Promise<ChatResult>;
 type OkResult = Extract<SqlResult, { ok: true }>;
 
-const NUMBER = /-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?/g;
+// A dash is a minus sign only when it doesn't follow a word character or another dash:
+// "2025-04-21" is 2025, 4 and 21 (not -4, -21), "2024-25" is 2024 and 25, "-5" is -5
+const NUMBER = /(?:(?<![\w-])-)?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)/g;
 const numbersIn = (text: string) => (text.match(NUMBER) ?? []).map((n) => Number(n.replace(/,/g, "")));
 
 // Numbers in the answer that the result can't account for
@@ -30,9 +32,10 @@ export function ungroundedNumbers(answer: string, result: OkResult, question: st
   }
   const fromQuestion = new Set(numbersIn(question));
   const close = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+  // The value itself or as a percentage (a fraction times 100), either rounded to 0-2 decimals
   const accounted = (n: number) =>
     fromQuestion.has(n) ||
-    values.some((v) => close(v, n) || [0, 1, 2].some((k) => close(Number(v.toFixed(k)), n)) || Math.abs(v * 100 - n) < 0.051);
+    values.some((v) => [v, v * 100].some((x) => close(x, n) || [0, 1, 2].some((k) => close(Number(x.toFixed(k)), n))) || Math.abs(v * 100 - n) < 0.051);
   return [...new Set(numbersIn(answer))].filter((n) => !accounted(n));
 }
 
@@ -43,7 +46,8 @@ export async function writeAnswer(input: { question: string; sql: string; result
   ];
   for (let attempt = 0; attempt < 2; attempt++) {
     const reply = await input.call(messages, { json: true });
-    const text = String(parseJson(reply.content)?.answer ?? reply.content ?? "").trim();
+    // Folded to ASCII first (NFKC), so fullwidth digits can't slip numbers past the grounding check
+    const text = String(parseJson(reply.content)?.answer ?? reply.content ?? "").normalize("NFKC").trim();
     const missing = ungroundedNumbers(text, input.result, input.question);
     if (text && !missing.length) return { answer: scrubText(text), grounded: true };
     messages.push({ role: "assistant", content: reply.content });

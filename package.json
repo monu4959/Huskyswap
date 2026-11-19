@@ -9,10 +9,12 @@
     "lint": "eslint",
     "seed": "node scripts/seed-supabase.mjs",
     "test:rls": "node scripts/test-rls.mjs",
+    "test:env": "node scripts/test-env.mjs",
     "sql": "node scripts/sql.mjs",
     "schema-card": "node scripts/build-schema-card.mjs",
     "ask": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ask.mjs",
     "test:agent-guard": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-agent-guard.mjs",
+    "test:redteam": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/redteam-assistant.mjs",
     "smoke:agent": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-agent.mjs",
     "rag:index": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-rag-index.mjs",
     "test:retrieval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-retrieval.mjs",
@@ -26,28 +28,32 @@
     "gate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gate.mjs",
     "test:serving": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-serving.mjs",
     "canary:check": "node scripts/canary-check.mjs",
-    "drift": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/drift.mjs"
+    "drift": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/drift.mjs",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",
     "@supabase/supabase-js": "^2.117.3",
     "libpg-query": "18.1.5",
     "lucide-react": "^1.52.0",
-    "next": "16.4.2",
+    "next": "16.4.5",
     "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.5",
     "sharp": "^0.35.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "3.2.4"
   }
 }

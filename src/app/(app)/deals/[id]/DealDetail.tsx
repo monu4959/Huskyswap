@@ -8,7 +8,7 @@ import { Avatar } from "@/components/Avatar";
 import { dealRole, dealTone } from "@/components/DealRow";
 import { ItemArt } from "@/components/ItemArt";
 import { ReportButton } from "@/components/ReportDialog";
-import { Button, Card, EmptyState, Field, Seg, StatusPill, TopBar, inputClass, narrowClass, roundClass, useAction } from "@/components/ui";
+import { Button, Card, EmptyState, Field, Seg, StatusPill, TopBar, inputClass, narrowClass, radioGroupKeys, radioTabIndex, roundClass, useAction } from "@/components/ui";
 import { DEAL_STATUS_LABEL, RETURN_CONDITION_LABEL, formatPrice } from "@/lib/constants";
 import { shortDate, timeAgo } from "@/lib/format";
 import { MEETUP_SPOTS } from "@/lib/reference";
@@ -81,7 +81,7 @@ export function DealDetail({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex items-center gap-3">
           <Avatar name={other?.name ?? "?"} />
           <div className="min-w-0 flex-1">
-            <b className="block text-body font-semibold">{other?.name}</b>
+            <b className="block text-body font-semibold wrap-anywhere">{other?.name}</b>
             <span className="text-micro text-muted">{mine ? (deal.type === "sale" ? "Buyer" : "Borrower") : "Owner"}</span>
           </div>
           <button type="button" onClick={message} className={roundClass} aria-label={`Message ${other?.name}`}>
@@ -92,7 +92,7 @@ export function DealDetail({ params }: { params: Promise<{ id: string }> }) {
         {ended ? (
           <Card className="p-4">
             <StatusPill tone="muted">{DEAL_STATUS_LABEL[deal.status]}</StatusPill>
-            <p className="mt-2 text-small text-muted">
+            <p className="mt-2 text-small text-muted wrap-anywhere">
               {deal.status === "declined"
                 ? mine
                   ? "You declined this request."
@@ -176,7 +176,7 @@ function NextStep({ deal, mine, otherName }: { deal: Transaction; mine: boolean;
   const rental = deal.type === "rental";
   const tid = deal.transaction_id;
 
-  const wait = (text: string) => <p className="text-small text-muted">{text}</p>;
+  const wait = (text: string) => <p className="text-small text-muted wrap-anywhere">{text}</p>;
   const cancel = (
     <Button variant="ghost" className="w-full !text-coral" onClick={() => act(() => store.cancelDeal(tid), "Deal cancelled")}>
       Cancel deal
@@ -188,7 +188,7 @@ function NextStep({ deal, mine, otherName }: { deal: Transaction; mine: boolean;
       case "requested":
         return (
           <>
-            <p className="font-semibold">
+            <p className="font-semibold wrap-anywhere">
               {otherName} wants to {rental ? "rent this for a week" : "buy this"}.
             </p>
             <p className="text-small text-muted">Accepting reserves the item and declines any other requests for it.</p>
@@ -297,14 +297,15 @@ function Reviews({ deal, otherName }: { deal: Transaction; otherName: string }) 
         <ReviewCard who="You" rating={mineReview.rating} comment={mineReview.comment} />
       ) : (
         <Card className="space-y-3 p-4">
-          <p className="font-semibold">How was it with {otherName}?</p>
-          <div role="radiogroup" aria-label="Rating" className="flex gap-1">
-            {[1, 2, 3, 4, 5].map((n) => (
+          <p className="font-semibold wrap-anywhere">How was it with {otherName}?</p>
+          <div role="radiogroup" aria-label="Rating" onKeyDown={radioGroupKeys} className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((n, i) => (
               <button
                 key={n}
                 type="button"
                 role="radio"
                 aria-checked={rating === n}
+                tabIndex={radioTabIndex(rating === n, i, rating > 0)}
                 aria-label={`${n} star${n > 1 ? "s" : ""}`}
                 onClick={() => setRating(n)}
                 className="grid size-11 cursor-pointer place-items-center"
@@ -330,14 +331,14 @@ function ReviewCard({ who, rating, comment }: { who: string; rating: number; com
   return (
     <Card className="p-3.5">
       <p className="flex items-center gap-2 text-small">
-        <span className="font-semibold">{who}</span>
-        <span className="flex" aria-label={`${rating} out of 5 stars`}>
+        <span className="min-w-0 font-semibold wrap-anywhere">{who}</span>
+        <span className="flex shrink-0" role="img" aria-label={`${rating} out of 5 stars`}>
           {[1, 2, 3, 4, 5].map((n) => (
             <Star key={n} className={`size-3.5 ${n <= rating ? "fill-gold text-gold" : "text-muted/50"}`} aria-hidden />
           ))}
         </span>
       </p>
-      {comment && <p className="mt-1 text-small text-muted">{comment}</p>}
+      {comment && <p className="mt-1 text-small text-muted wrap-anywhere">{comment}</p>}
     </Card>
   );
 }

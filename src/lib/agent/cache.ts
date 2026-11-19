@@ -5,13 +5,16 @@
 // words, and mostly the same key terms. Embeddings alone confuse near-misses:
 // "cheapest bike" vs "most expensive bike" score 0.92 with gte-small.
 //
-// On a hit the stored SQL is run again (fresh data); the stored answer text is
-// reused only if the result is unchanged. Entries are scoped by role, and by
-// student when the SQL reads my_* views. Questions about "today", "this week"
-// and the like expire at the next Boston midnight.
+// On a hit the stored SQL is run again (fresh data) as the student asking; the
+// stored answer text is reused only for the student who asked it, and only if the
+// result is unchanged (graph.ts serve). Entries are scoped by role, and by student
+// when the SQL reads my_* views or selects string constants (decided from the parse
+// tree, guard.ts sqlTraits). Questions about "today", "this week" and the like expire
+// at the next Boston midnight.
 
 import { createHash } from "node:crypto";
 import { toVector } from "./vector.ts";
+import { sqlTraits } from "./guard.ts";
 import { opsPool } from "./ops-db.ts";
 import { PROMPT_VERSION } from "./prompt.ts";
 import { SCHEMA_HASH } from "./schema-card.ts";
@@ -37,7 +40,11 @@ const POLARITY: Record<string, string> = {
 const TIME = new Set(
   "today yesterday tomorrow now currently rn week weekend month year semester term spring summer fall autumn winter finals move-in move-out break holiday last this next past previous recent recently jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july august september october november december monday tuesday wednesday thursday friday saturday sunday".split(" "),
 );
-const RELATIVE = /\b(today|yesterday|tomorrow|now|currently|rn|right now|this|last|past|previous|recent|recently|next|current)\b/i;
+// Phrasings whose meaning depends on the day they're asked (the model turns them into
+// fixed dates). Covers the relative words in retrieve.ts TIME_WORDS (recent, lately,
+// last, since, ago); a bare weekday means the most recent one.
+const RELATIVE =
+  /\b(today|tonight|yesterday|tomorrow|now|currently|rn|right now|so far|to date|this|last|latest|past|previous|recent|recently|lately|ago|since|next|upcoming|current|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 const STOP = new Set("the a an and or of for to in on at by with from is are was were be how what which who when where any all some show me my i we do does did can could have has had get got per vs than as it its this that there their them".split(" "));
 
 type Slots = { numbers: string[]; polarity: string[]; time: string[]; terms: string[] };
@@ -75,13 +82,12 @@ export function resultHash(result: SqlResult) {
   return createHash("sha256").update(JSON.stringify(result.ok ? [result.columns, result.rows] : result.error)).digest("hex").slice(0, 16);
 }
 
-const PERSONAL = /\bmy_(listings|deals|saved_items|reviews)\b/;
-
-export type CacheHit = { cacheId: number; question: string; sql: string; answer: string; resultHash: string; similarity: number };
+// askedBy: the student whose run stored the entry (null from the CLI)
+export type CacheHit = { cacheId: number; question: string; sql: string; answer: string; resultHash: string; similarity: number; askedBy: string | null };
 
 export async function cacheLookup(question: string, vector: number[], role: DbRole, userId: string | null): Promise<CacheHit | null> {
   const { rows } = await opsPool().query(
-    `select cache_id, question, slots, sql, answer, result_hash,
+    `select cache_id, question, slots, sql, answer, result_hash, asked_by,
             1 - (embedding operator(extensions.<=>) $1::extensions.vector) as similarity
      from ops.query_cache
      where db_role = $2 and cache_version = $3
@@ -95,7 +101,10 @@ export async function cacheLookup(question: string, vector: number[], role: DbRo
   const row = rows.find((r) => r.similarity >= CACHE_SIMILARITY && compatible(slots, r.slots));
   if (!row) return null;
   await opsPool().query("update ops.query_cache set hits = hits + 1, last_hit_at = now() where cache_id = $1", [row.cache_id]);
-  return { cacheId: row.cache_id, question: row.question, sql: row.sql, answer: row.answer, resultHash: row.result_hash, similarity: row.similarity };
+  return {
+    cacheId: row.cache_id, question: row.question, sql: row.sql, answer: row.answer, resultHash: row.result_hash, similarity: row.similarity,
+    askedBy: row.asked_by ?? null,
+  };
 }
 
 export async function cacheStore(entry: {
@@ -108,17 +117,18 @@ export async function cacheStore(entry: {
   result: SqlResult;
   runId: string | null;
 }) {
-  // SQL over my_* views is only ever reused for the same student
-  const personal = PERSONAL.test(entry.sql);
-  if (personal && !entry.userId) return;
+  // SQL over my_* views, or selecting text the model chose, is only ever reused for the same student
+  const { personal, literalOutput } = await sqlTraits(entry.sql);
+  const scoped = personal || literalOutput;
+  if (scoped && !entry.userId) return;
   await opsPool().query(
-    `insert into ops.query_cache (db_role, user_id, question, slots, sql, answer, result_hash, valid_until, run_id, cache_version, embedding)
+    `insert into ops.query_cache (db_role, user_id, question, slots, sql, answer, result_hash, valid_until, run_id, cache_version, embedding, asked_by)
      values ($1, $2, $3, $4, $5, $6, $7,
              case when $8 then ((now() at time zone 'America/New_York')::date + 1)::timestamp at time zone 'America/New_York' end,
-             $9, $10, $11::extensions.vector)`,
+             $9, $10, $11::extensions.vector, $12)`,
     [
-      entry.role, personal ? entry.userId : null, entry.question, JSON.stringify(slotsOf(entry.question)), entry.sql, entry.answer,
-      resultHash(entry.result), RELATIVE.test(entry.question), entry.runId, CACHE_VERSION, toVector(entry.vector),
+      entry.role, scoped ? entry.userId : null, entry.question, JSON.stringify(slotsOf(entry.question)), entry.sql, entry.answer,
+      resultHash(entry.result), RELATIVE.test(entry.question), entry.runId, CACHE_VERSION, toVector(entry.vector), entry.userId,
     ],
   );
 }

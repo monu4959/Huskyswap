@@ -13,11 +13,18 @@ type Step = "email" | "code" | "name";
 const RESEND_AFTER = 60; // seconds
 // Email codes aren't set up yet: in demo mode no email is sent and any 6-digit code works (/api/demo-login)
 const DEMO_LOGIN = process.env.NEXT_PUBLIC_DEMO_LOGIN === "true";
+// Google sign-in shows once it's set up in Supabase (README: Sign-in)
+const GOOGLE_LOGIN = process.env.NEXT_PUBLIC_GOOGLE_LOGIN === "true";
+// The Northeastern email form shows in demo mode, once real email codes are set up,
+// or whenever there's no Google button (so there's always a way in)
+const EMAIL_LOGIN = DEMO_LOGIN || process.env.NEXT_PUBLIC_EMAIL_LOGIN === "true" || !GOOGLE_LOGIN;
 
-// Supabase Auth sends a one-time code to the Northeastern address; the
-// enforce_nu_email trigger rejects any other domain on the server too.
+// Sign in with Google (Supabase Auth, PKCE): Google proves who you are and sends
+// you back here with a one-time code. The Northeastern email form is the demo /
+// email-code path; the enforce_nu_email trigger allows Google accounts and
+// @northeastern.edu addresses only.
 export default function LoginPage() {
-  const { ready, me, sendCode, verifyCode, demoSignIn, updateName } = useStore();
+  const { ready, me, sendCode, verifyCode, demoSignIn, googleSignIn, finishGoogleSignIn, updateName } = useStore();
   const router = useRouter();
   const toast = useToast();
   const [step, setStep] = useState<Step>("email");
@@ -28,6 +35,37 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const codeRef = useRef<HTMLInputElement>(null);
+  const oauthHandled = useRef(false);
+
+  // Back from Google: ?code=… to finish signing in, or ?error=… if it didn't work
+  useEffect(() => {
+    if (oauthHandled.current) return;
+    oauthHandled.current = true; // a code works once, even if effects run twice
+    const params = new URLSearchParams(window.location.search);
+    const oauthCode = params.get("code");
+    const oauthError = params.get("error_description") ?? params.get("error");
+    if (!oauthCode && !oauthError) return;
+    window.history.replaceState(null, "", window.location.pathname); // don't leave the code in the address bar
+    // State updates happen in the callback, once the outcome is known
+    void Promise.resolve().then(async () => {
+      if (oauthError) {
+        setError(friendly(oauthError));
+        return;
+      }
+      setBusy(true);
+      try {
+        const { isNew, name: googleName } = await finishGoogleSignIn(oauthCode!);
+        if (isNew) {
+          setName(googleName);
+          setStep("name");
+        } else router.replace("/");
+      } catch (e) {
+        setError(e instanceof ActionError ? friendly(e.message) : "Couldn't finish signing in with Google. Try again.");
+      } finally {
+        setBusy(false);
+      }
+    });
+  }, [finishGoogleSignIn, router]);
 
   // Already signed in: go home (but not mid-sign-in, which may still ask for a name)
   useEffect(() => {
@@ -58,6 +96,12 @@ export default function LoginPage() {
       setBusy(false);
     }
   };
+
+  const google = () =>
+    run(async () => {
+      await googleSignIn(); // the browser leaves for Google
+      await new Promise(() => {}); // keep the button busy until it does
+    });
 
   const submitEmail = (e: FormEvent) => {
     e.preventDefault();
@@ -138,7 +182,7 @@ export default function LoginPage() {
             The marketplace for Northeastern students. Textbooks, dorm gear and bikes from people on your campus.
           </p>
           <ul className="mt-8 hidden gap-3 text-small md:grid">
-            {["Only @northeastern.edu accounts", "Meet at campus spots, pay in person", "Rent things for a week, deposit back on return"].map((t) => (
+            {[GOOGLE_LOGIN ? "Sign in with your Google account" : "Only @northeastern.edu accounts", "Meet at campus spots, pay in person", "Rent things for a week, deposit back on return"].map((t) => (
               <li key={t} className="flex items-center gap-2.5">
                 <span className="grid size-6 place-items-center rounded-full bg-accent-soft text-accent-ink">
                   <Check className="size-3.5" strokeWidth={2.5} aria-hidden />
@@ -167,10 +211,41 @@ export default function LoginPage() {
         ) : (
           <>
             <p className="mb-5 text-body text-muted">
-              Only for Northeastern students. Sign in with your school email and we&apos;ll send you a code.
+              {!GOOGLE_LOGIN
+                ? "Only for Northeastern students. Sign in with your school email and we'll send you a code."
+                : EMAIL_LOGIN
+                  ? "Sign in with Google, or with your Northeastern email."
+                  : "Sign in with your Google account. New here? It creates your account."}
             </p>
 
+            {step === "email" && GOOGLE_LOGIN && (
+              <>
+                <button
+                  type="button"
+                  onClick={google}
+                  disabled={busy}
+                  className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-full border border-line bg-surface font-semibold text-fg shadow-raise transition-colors hover:bg-field disabled:cursor-default disabled:opacity-60"
+                >
+                  <GoogleMark className="size-5" />
+                  {busy ? "Opening Google…" : "Continue with Google"}
+                </button>
+                {!EMAIL_LOGIN && error && (
+                  <p className="mt-3 text-small text-coral" role="alert">
+                    {error}
+                  </p>
+                )}
+                {EMAIL_LOGIN && (
+                  <div className="my-5 flex items-center gap-3 text-small text-muted" aria-hidden>
+                    <span className="h-px flex-1 bg-line" />
+                    or
+                    <span className="h-px flex-1 bg-line" />
+                  </div>
+                )}
+              </>
+            )}
+
             {step === "email" ? (
+              EMAIL_LOGIN && (
               <form onSubmit={submitEmail} noValidate className="space-y-4">
                 <Field label="Northeastern email" error={error}>
                   <input
@@ -185,10 +260,11 @@ export default function LoginPage() {
                     aria-invalid={!!error}
                   />
                 </Field>
-                <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? "Sending…" : "Send code"}
+                <Button type="submit" variant={GOOGLE_LOGIN ? "soft" : undefined} className="w-full" disabled={busy}>
+                  {busy ? "Sending…" : GOOGLE_LOGIN && DEMO_LOGIN ? "Continue with email" : "Send code"}
                 </Button>
               </form>
+              )
             ) : (
               <form onSubmit={submitCode} noValidate>
                 <span className="mb-2 block text-small font-semibold">Northeastern email</span>
@@ -268,8 +344,23 @@ export default function LoginPage() {
   );
 }
 
+// Google's "G", for the sign-in button (Google's sign-in branding guidelines)
+function GoogleMark({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden>
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  );
+}
+
 // Supabase Auth messages, in plain words
 function friendly(message: string) {
+  if (/access_denied|denied|cancel/i.test(message)) return "Google sign-in was cancelled. Try again when you're ready.";
+  if (/provider is not enabled|unsupported provider/i.test(message)) return "Google sign-in isn't switched on yet.";
+  if (/code verifier|flow state|invalid grant|auth code/i.test(message)) return "That sign-in link expired. Tap Continue with Google again.";
   if (/expired|invalid/i.test(message)) return "That code is wrong or expired. Check the latest email or resend.";
   if (/rate limit|too many|security purposes/i.test(message)) return "Too many codes requested. Wait a minute and try again.";
   if (/northeastern|database error saving new user/i.test(message)) return "Only @northeastern.edu addresses can sign up.";

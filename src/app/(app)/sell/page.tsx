@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { Camera, ChevronDown, Plus, X } from "lucide-react";
 import { Button, Field, Seg, Switch, TopBar, inputClass, narrowClass, useAction, useToast } from "@/components/ui";
 import { CATEGORIES, CATEGORY_LABEL, CONDITION_LABEL, RENTAL_DAYS } from "@/lib/constants";
@@ -36,6 +37,9 @@ export default function SellPage() {
   const [deposit, setDeposit] = useState("");
   const [spot, setSpot] = useState("");
   const [errors, setErrors] = useState<Errors>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  const conditionErrorId = useId();
+  const offerErrorId = useId();
 
   const addPhotos = async (files: FileList | null) => {
     if (!files) return;
@@ -58,9 +62,13 @@ export default function SellPage() {
     if (forRent && !validMoney(money(weekly))) next.weekly = "Enter a price for the week.";
     if (forRent && deposit.trim() && !validMoney(money(deposit))) next.deposit = "Enter a deposit or leave it empty.";
     if (!spot) next.spot = "Pick where you'll meet.";
-    setErrors(next);
+    // Commit the errors now so the fields carry aria-invalid and their messages before focus moves
+    flushSync(() => setErrors(next));
     if (Object.keys(next).length) {
-      document.querySelector<HTMLElement>("[aria-invalid='true']")?.focus();
+      // The first invalid control in form order; in a radio group, its Tab stop
+      const bad = formRef.current?.querySelector<HTMLElement>("[aria-invalid='true']");
+      const target = bad?.getAttribute("role") === "radiogroup" ? bad.querySelector<HTMLElement>("[tabindex='0']") : bad;
+      target?.focus();
       return;
     }
     const id = await act(
@@ -83,7 +91,7 @@ export default function SellPage() {
   return (
     <div className={narrowClass}>
       <TopBar back="/" backIcon="close" title="New listing" />
-      <form onSubmit={submit} noValidate className="space-y-5 pt-2 pb-36 md:mb-16 md:rounded-sheet md:bg-surface md:p-8 md:shadow-raise">
+      <form ref={formRef} onSubmit={submit} noValidate className="space-y-5 pt-2 pb-36 md:mb-16 md:rounded-sheet md:bg-surface md:p-8 md:shadow-raise">
         <fieldset>
           <legend className="mb-2 text-small font-semibold">Photos</legend>
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
@@ -146,38 +154,44 @@ export default function SellPage() {
 
         <div>
           <span className="mb-2 block text-small font-semibold">Condition</span>
-          <div aria-invalid={!!errors.condition}>
-            <Seg<ItemCondition | "">
-              label="Condition"
-              value={condition}
-              onChange={setCondition}
-              options={CONDITIONS.map((c) => ({ value: c, label: CONDITION_LABEL[c] }))}
-            />
-          </div>
-          {errors.condition && <p className="mt-1.5 text-small text-coral">{errors.condition}</p>}
+          <Seg<ItemCondition | "">
+            label="Condition"
+            value={condition}
+            onChange={setCondition}
+            options={CONDITIONS.map((c) => ({ value: c, label: CONDITION_LABEL[c] }))}
+            invalid={!!errors.condition}
+            describedBy={errors.condition ? conditionErrorId : undefined}
+          />
+          {errors.condition && (
+            <p id={conditionErrorId} className="mt-1.5 text-small text-coral">
+              {errors.condition}
+            </p>
+          )}
         </div>
 
         <div>
           <span className="mb-2 block text-small font-semibold">Offer it for</span>
           <div className="rounded-card bg-surface px-4 py-1 shadow-raise md:bg-field md:shadow-none">
-            <OfferRow label="Sell" checked={forSale} onChange={setForSale}>
-              <MoneyInput label="Sale price" value={price} onChange={setPrice} invalid={!!errors.price} />
+            <OfferRow label="Sell" checked={forSale} onChange={setForSale} invalid={!!errors.offer} describedBy={errors.offer ? offerErrorId : undefined}>
+              <MoneyInput label="Sale price" value={price} onChange={setPrice} invalid={!!errors.price} describedBy={errors.price ? offerErrorId : undefined} />
             </OfferRow>
-            <OfferRow label="Rent" sub={`for ${RENTAL_DAYS} days`} checked={forRent} onChange={setForRent} border>
-              <MoneyInput label="Price for the week" value={weekly} onChange={setWeekly} invalid={!!errors.weekly} />
+            <OfferRow label="Rent" sub={`for ${RENTAL_DAYS} days`} checked={forRent} onChange={setForRent} describedBy={errors.offer ? offerErrorId : undefined} border>
+              <MoneyInput label="Price for the week" value={weekly} onChange={setWeekly} invalid={!!errors.weekly} describedBy={errors.weekly ? offerErrorId : undefined} />
             </OfferRow>
             {forRent && (
               <div className="flex h-14 items-center gap-2.5 border-t border-line">
                 <b className="flex-1 text-body font-semibold">
                   Deposit <span className="font-normal text-muted">(optional)</span>
                 </b>
-                <MoneyInput label="Deposit" value={deposit} onChange={setDeposit} invalid={!!errors.deposit} />
+                <MoneyInput label="Deposit" value={deposit} onChange={setDeposit} invalid={!!errors.deposit} describedBy={errors.deposit ? offerErrorId : undefined} />
                 <span className="w-11" />
               </div>
             )}
           </div>
           {(errors.offer || errors.price || errors.weekly || errors.deposit) && (
-            <p className="mt-1.5 text-small text-coral">{errors.offer ?? errors.price ?? errors.weekly ?? errors.deposit}</p>
+            <p id={offerErrorId} className="mt-1.5 text-small text-coral">
+              {errors.offer ?? errors.price ?? errors.weekly ?? errors.deposit}
+            </p>
           )}
         </div>
 
@@ -210,6 +224,8 @@ function OfferRow({
   sub,
   checked,
   onChange,
+  invalid,
+  describedBy,
   border,
   children,
 }: {
@@ -217,6 +233,8 @@ function OfferRow({
   sub?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  invalid?: boolean;
+  describedBy?: string;
   border?: boolean;
   children: ReactNode;
 }) {
@@ -226,12 +244,24 @@ function OfferRow({
         {label} {sub && <span className="font-normal text-muted">{sub}</span>}
       </b>
       {checked ? children : <span className="text-small text-muted">Off</span>}
-      <Switch checked={checked} onChange={onChange} label={label} />
+      <Switch checked={checked} onChange={onChange} label={label} invalid={invalid} describedBy={describedBy} />
     </div>
   );
 }
 
-function MoneyInput({ label, value, onChange, invalid }: { label: string; value: string; onChange: (v: string) => void; invalid: boolean }) {
+function MoneyInput({
+  label,
+  value,
+  onChange,
+  invalid,
+  describedBy,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  invalid: boolean;
+  describedBy?: string;
+}) {
   return (
     <label className="flex h-10 w-[96px] items-center rounded-full bg-field px-3 text-lead font-bold focus-within:bg-surface focus-within:ring-2 focus-within:ring-accent-ink md:bg-surface">
       <span aria-hidden className="text-muted">
@@ -244,16 +274,29 @@ function MoneyInput({ label, value, onChange, invalid }: { label: string; value:
         onChange={(e) => onChange(e.target.value)}
         placeholder="0"
         aria-invalid={invalid}
+        aria-describedby={describedBy}
         className="w-full min-w-0 bg-transparent pl-1 text-fg outline-none placeholder:text-muted"
       />
     </label>
   );
 }
 
-function Select({ value, onChange, invalid, children }: { value: string; onChange: (v: string) => void; invalid: boolean; children: ReactNode }) {
+function Select({
+  value,
+  onChange,
+  invalid,
+  children,
+  "aria-describedby": describedBy,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  invalid: boolean;
+  children: ReactNode;
+  "aria-describedby"?: string; // set by Field
+}) {
   return (
     <span className="relative block">
-      <select value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid} className={`${inputClass} cursor-pointer appearance-none pr-10`}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid} aria-describedby={describedBy} className={`${inputClass} cursor-pointer appearance-none pr-10`}>
         {children}
       </select>
       <ChevronDown className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted" aria-hidden />

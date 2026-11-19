@@ -69,7 +69,8 @@ function Paw({ className = "", style }: { className?: string; style?: CSSPropert
 // Three paw prints stepping in turn: "the husky is typing"
 export function PawTyping({ label = "Thinking" }: { label?: string }) {
   return (
-    <span className="motion-loop inline-flex items-center gap-1.5 text-muted" role="status" aria-label={label}>
+    <span className="motion-loop inline-flex items-center gap-1.5 text-muted" role="status">
+      <span className="sr-only">{label}</span>
       {[0, 1, 2].map((i) => (
         <Paw
           key={i}

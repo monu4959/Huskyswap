@@ -88,8 +88,15 @@ console.log("\nStudents' own data (my_* views)");
 {
   const admin = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
   await admin.connect();
-  const { rows: [a, b] } = await admin.query(
-    "with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals) select id::text, count(*)::int as n from u group by id order by 2 desc limit 2",
+  // A: the busiest student; B: the busiest one with at least one deal A wasn't part of
+  // (load-test accounts can trade only with each other)
+  const { rows: [a] } = await admin.query(
+    "with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals) select id::text, count(*)::int as n from u group by id order by 2 desc limit 1",
+  );
+  const { rows: [b] } = await admin.query(
+    `with u as (select buyer_id as id, deal_id, seller_id as other from nlq.deals union all select seller_id, deal_id, buyer_id from nlq.deals)
+     select id::text, count(*)::int as n from u where id <> $1::uuid group by id having bool_or(other <> $1::uuid) order by 2 desc limit 1`,
+    [a.id],
   );
   const { rows: [{ deal_id: bDeal }] } = await admin.query(
     "select deal_id from nlq.deals where $1::uuid in (buyer_id, seller_id) and $2::uuid not in (buyer_id, seller_id) limit 1",
@@ -114,6 +121,100 @@ console.log("\nStudents' own data (my_* views)");
   await refused("model reads the user id", "nlq_student", "select current_setting('app.user_id', true)");
 }
 
+// Found by the rogue-model red team (scripts/redteam-assistant.mjs); fixed in migration 0011,
+// guard.ts, db.ts and privacy.ts
+console.log("\nRed-team regressions");
+{
+  const admin = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await admin.connect();
+  const { rows: [hidden] } = await admin.query(
+    "select item_id, title, description from nlq.listings_all where status in ('sold', 'removed', 'rented_out') and length(title) > 3 order by item_id limit 1",
+  );
+  const { rows: barrier } = await admin.query(
+    "select c.relname from pg_class c where c.relnamespace = 'nlq'::regnamespace and c.relname in ('listings', 'meetup_spots', 'categories') and not coalesce(c.reloptions @> array['security_barrier=true'], false)",
+  );
+  report(!barrier.length, "student-visible views are security barriers", barrier.length ? `missing: ${barrier.map((r) => r.relname).join(", ")}` : "listings, meetup_spots, categories");
+
+  // A cheap erroring predicate must never run on rows the view filters out (sold/removed listings)
+  for (const [label, sql] of [
+    ["title::boolean on a sold listing (error would quote its title)", `select count(*) from nlq.listings where item_id = ${hidden.item_id} and title::boolean`],
+    ["description::boolean on a sold listing", `select count(*) from nlq.listings where item_id = ${hidden.item_id} and description::boolean`],
+    ["cast(title as int) on a sold listing", `select count(*) from nlq.listings where item_id = ${hidden.item_id} and cast(title as int) = 1`],
+    ["cast error in a join condition", `select count(*) from nlq.listings l join nlq.categories c on c.category = l.category and l.item_id = ${hidden.item_id} and l.title::boolean`],
+  ]) {
+    const r = await runSelect(sql, "nlq_student");
+    const leaked = !r.ok && (r.error.includes(hidden.title) || (hidden.description && r.error.includes(hidden.description.slice(0, 40))));
+    report(!leaked, `error-based read through nlq.listings: ${label}`, r.ok ? `${r.rows[0].count} rows, no error` : r.error.slice(0, 110));
+  }
+
+  // Database errors can quote values: masked like results
+  const e = await runSelect("select count(*) from nlq.categories where 'write to bob.smith@example.com or (617) 555-0123'::boolean", "nlq_student");
+  report(!e.ok && !/example\.com|555-0123/.test(e.error), "database error messages are scrubbed", e.ok ? "RAN" : e.error);
+
+  // Function calls without a FuncCall node
+  await refused("attribute notation alias.to_json on a subquery", "nlq_student", "select x.to_json from (select title from nlq.listings limit 1) x");
+  await refused("attribute notation alias.row_to_json on a view", "nlq_student", "select s.row_to_json from nlq.my_deals s");
+  await refused("field selection (row).f1", "nlq_student", "select (row(1, 2)).f1");
+  await refused("field selection (alias).*", "nlq_admin", "select (t).* from nlq.listings_all t");
+  await allowed("array subscripts still work", "nlq_admin", "select (a)[1] from (select array[1, 2] as a) x");
+
+  // Every function attribute notation could reach is on the guard's list (catches Postgres upgrades)
+  const { ATTRIBUTE_FUNCTIONS } = await import("../src/lib/agent/guard.ts");
+  const { rows: reachable } = await admin.query(`
+    select distinct p.proname
+    from pg_proc p join pg_type t on t.oid = p.proargtypes[0]
+    where p.pronargs = 1 and p.prokind = 'f' and p.pronamespace in ('pg_catalog'::regnamespace, 'nlq'::regnamespace)
+      and t.typtype in ('c', 'p')
+      and t.typname not in ('internal', 'cstring', 'trigger', 'event_trigger', 'language_handler', 'fdw_handler', 'index_am_handler', 'tsm_handler', 'table_am_handler')
+      and has_function_privilege('nlq_student', p.oid, 'execute')`);
+  const missing = reachable.map((r) => r.proname).filter((n) => !ATTRIBUTE_FUNCTIONS.has(n));
+  report(!missing.length, "guard knows every function reachable through attribute notation", missing.length ? `missing: ${missing.join(", ")}` : `${reachable.length} functions`);
+  await admin.end();
+}
+
+console.log("\nStudent-only login (nlq_agent_student, migration 0011)");
+if (!process.env.NLQ_STUDENT_DATABASE_URL) {
+  report(false, "NLQ_STUDENT_DATABASE_URL is set", "missing: student questions would run as nlq_agent");
+} else {
+  const who = await runSelect("select session_user as login, current_user as role", "nlq_student");
+  report(who.ok && who.rows[0].login === "nlq_agent_student" && who.rows[0].role === "nlq_student", "student queries run on the nlq_agent_student login", who.ok ? JSON.stringify(who.rows[0]) : who.error);
+  const adminWho = await runSelect("select session_user as login, current_user as role", "nlq_admin");
+  report(adminWho.ok && adminWho.rows[0].login === "nlq_agent" && adminWho.rows[0].role === "nlq_admin", "admin queries run on the nlq_agent login", adminWho.ok ? JSON.stringify(adminWho.rows[0]) : adminWho.error);
+
+  const s = new pg.Client({ connectionString: process.env.NLQ_STUDENT_DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await s.connect();
+  const attempt = async (label, statements, expectOk) => {
+    try {
+      await s.query("begin read only");
+      let last;
+      for (const q of statements) last = await s.query(q);
+      report(expectOk, label, expectOk ? `${last.rows.length} rows` : `RAN: ${JSON.stringify(last.rows[0])}`);
+    } catch (err) {
+      report(!expectOk, label, err.message.slice(0, 110));
+    } finally {
+      await s.query("rollback").catch(() => {});
+    }
+  };
+  await attempt("nlq_agent_student: set role nlq_admin is refused", ["set local role nlq_admin", "select count(*) from nlq.deals"], false);
+  await attempt("nlq_agent_student: set_config('role', 'nlq_admin') is refused", ["select set_config('role', 'nlq_admin', true)", "select count(*) from nlq.deals"], false);
+  await attempt("nlq_agent_student: set role postgres is refused", ["set local role postgres"], false);
+  await attempt("nlq_agent_student: reads nothing before switching (noinherit)", ["select count(*) from nlq.listings"], false);
+  await attempt("nlq_agent_student as nlq_student: admin views are refused", ["set local role nlq_student", "select count(*) from nlq.deals"], false);
+  await attempt("nlq_agent_student as nlq_student: listings work", ["set local role nlq_student", "select title from nlq.listings limit 3"], true);
+  await attempt("nlq_agent_student: writes are refused", ["set local role nlq_student", "select set_config('app.user_id', '', true)", "set transaction read write"], false);
+  await s.end();
+
+  // my_* scoping through the student login
+  const admin = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await admin.connect();
+  const { rows: [top] } = await admin.query(
+    "with u as (select buyer_id as id from nlq.deals union all select seller_id from nlq.deals) select id::text, count(*)::int as n from u group by id order by 2 desc limit 1",
+  );
+  await admin.end();
+  const mine = await runSelect("select count(*)::int as n from nlq.my_deals", "nlq_student", [], { userId: top.id });
+  report(mine.ok && mine.rows[0].n === top.n, "my_* scoping works on the student login", mine.ok ? `${mine.rows[0].n} of ${top.n}` : mine.error);
+}
+
 console.log("\nDatabase layer alone (guard bypassed on purpose)");
 const db = new pg.Client({ connectionString: process.env.NLQ_DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await db.connect();
@@ -132,6 +233,25 @@ for (const [label, sql] of [
   } finally {
     await db.query("rollback").catch(() => {});
   }
+}
+// The leaky-view read with no guard at all: only the security barrier stands in the way
+{
+  const a = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+  await a.connect();
+  const { rows: [hidden] } = await a.query("select item_id, title from nlq.listings_all where status = 'sold' and length(title) > 3 order by item_id limit 1");
+  await a.end();
+  let outcome;
+  try {
+    await db.query("begin read only");
+    await db.query("set local role nlq_student");
+    const r = await db.query(`select count(*)::int as n from nlq.listings where item_id = ${hidden.item_id} and title::boolean`);
+    outcome = { leaked: false, detail: `${r.rows[0].n} rows, no error` };
+  } catch (e) {
+    outcome = { leaked: e.message.includes(hidden.title), detail: e.message.slice(0, 110) };
+  } finally {
+    await db.query("rollback").catch(() => {});
+  }
+  report(!outcome.leaked, "sold listing's title can't be read through an error in nlq.listings (security barrier)", outcome.detail);
 }
 await db.end();
 await closePool();

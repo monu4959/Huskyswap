@@ -67,6 +67,9 @@ export function TabBar() {
   );
 }
 
+// An icon link's accessible name carries its badge count: "Chats, 2 unread"
+const withCount = (label: string, count: number, what: string) => (count ? `${label}, ${count} ${what}` : label);
+
 const iconLinkClass = "relative grid size-10 place-items-center rounded-full text-fg transition-colors hover:bg-field";
 
 // Phones: logo, then Chats and Deals with their counts, then your avatar
@@ -82,11 +85,11 @@ export function MobileHeader() {
         <Logo className="text-[22px]" />
       </Link>
       <div className="flex items-center gap-1">
-        <Link href="/inbox" aria-label="Chats" className={`${iconLinkClass} ${pathname.startsWith("/inbox") ? "text-accent-ink" : ""}`}>
+        <Link href="/inbox" aria-label={withCount("Chats", store.unreadCount, "unread")} className={`${iconLinkClass} ${pathname.startsWith("/inbox") ? "text-accent-ink" : ""}`}>
           <MessageSquare className="size-[21px]" strokeWidth={1.8} aria-hidden />
           <CountBadge count={store.unreadCount} label="unread" className="absolute -top-0.5 -right-0.5" />
         </Link>
-        <Link href="/deals" aria-label="Deals" className={`${iconLinkClass} ${pathname.startsWith("/deals") ? "text-accent-ink" : ""}`}>
+        <Link href="/deals" aria-label={withCount("Deals", store.actionCount, "need attention")} className={`${iconLinkClass} ${pathname.startsWith("/deals") ? "text-accent-ink" : ""}`}>
           <ReceiptText className="size-[21px]" strokeWidth={1.8} aria-hidden />
           <CountBadge count={store.actionCount} label="need attention" className="absolute -top-0.5 -right-0.5" />
         </Link>

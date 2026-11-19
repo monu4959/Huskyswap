@@ -97,7 +97,12 @@ const backoffMs = (attempt: number) => Math.min(2 ** attempt * 1000, 30_000);
 export async function chat(
   cfg: ModelConfig,
   messages: ChatMessage[],
-  { tools = [], requireTool = false, json = false }: { tools?: readonly unknown[]; requireTool?: boolean; json?: boolean } = {},
+  {
+    tools = [],
+    requireTool = false,
+    json = false,
+    signal,
+  }: { tools?: readonly unknown[]; requireTool?: boolean; json?: boolean; signal?: AbortSignal } = {},
 ): Promise<ChatResult> {
   const body = JSON.stringify({
     model: cfg.model,
@@ -120,6 +125,7 @@ export async function chat(
     waitedMs += ms;
   };
   while (attempts < MAX_ATTEMPTS && rateLimits < MAX_RATE_LIMITS) {
+    if (signal?.aborted) throw new Error("Cancelled: the client disconnected");
     const picked = pick(pool);
     if ("waitMs" in picked) {
       if (picked.waitMs > MAX_WAIT_MS) {
@@ -139,9 +145,10 @@ export async function chat(
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${picked.key}` },
         body,
-        signal: AbortSignal.timeout(90_000),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
       });
     } catch (e) {
+      if (signal?.aborted) throw new Error("Cancelled: the client disconnected");
       lastError = `network: ${(e as Error).message}`;
       await wait(backoffMs(attempts++));
       continue;

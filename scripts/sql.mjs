@@ -20,7 +20,9 @@ if (!sql.trim()) {
   process.exit(1);
 }
 
-const url = readFileSync(new URL("../.env.local", import.meta.url), "utf8").match(/^DATABASE_URL=(.*)$/m)?.[1].trim();
+// A DATABASE_URL already in the environment wins (scripts/test-env.mjs points it at the local stack).
+const url =
+  process.env.DATABASE_URL ?? readFileSync(new URL("../.env.local", import.meta.url), "utf8").match(/^DATABASE_URL=(.*)$/m)?.[1].trim();
 const db = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
 await db.connect();
 try {

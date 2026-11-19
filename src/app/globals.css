@@ -4,7 +4,8 @@
    Calm, editorial and mostly neutral: warm off-white page, white cards, near-black
    ink, and Northeastern red used sparingly for actions, active states and badges.
    Type: Fraunces (display headings) and DM Sans (everything else).
-   All text pairs below meet WCAG AA (4.5:1) on bg, surface and field. */
+   All text pairs below meet WCAG AA (4.5:1) on bg, surface and field; muted text
+   (and placeholders) also on field-strong, the hovered-input fill. */
 
 :root,
 :root[data-theme="light"] {
@@ -13,7 +14,7 @@
   --field: #efece7; /* search, inputs, image wells */
   --field-strong: #e5e0d9; /* hover on fields */
   --fg: #1a1a1a; /* primary text and headings */
-  --muted: #6b6b6b; /* secondary text */
+  --muted: #636363; /* secondary text (4.5:1 even on field-strong, a hovered input) */
   --line: rgba(26, 26, 26, 0.08); /* dividers */
   --accent: #c8102e; /* Northeastern red: fills (buttons, badges, active) */
   --accent-press: #a50d25; /* hover and pressed */

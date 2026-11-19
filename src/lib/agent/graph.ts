@@ -49,9 +49,11 @@ export type RunOptions = {
   useCache?: boolean; // default: on for the app and CLI, off for datagen/eval/test
   useExamples?: boolean; // retrieve verified examples (default true)
   onEvent?: (event: GraphEvent) => void;
+  signal?: AbortSignal; // the client went away: stop before the next model call and abort the current one
 };
 
 class BudgetExceeded extends Error {}
+class Cancelled extends Error {}
 
 const GAVE_UP = "I couldn't work out a reliable query for that. Try rephrasing it or narrowing it down.";
 
@@ -101,11 +103,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
   const caller =
     (name: NodeName) =>
     async (messages: ChatMessage[], options: Parameters<typeof chat>[2]): Promise<ChatResult> => {
+      if (opts.signal?.aborted) throw new Cancelled("Cancelled: the client disconnected");
       if (run.promptTokens + run.completionTokens > RUN_BUDGET.tokens || performance.now() - started - waitedMs > RUN_BUDGET.ms || waitedMs > RUN_BUDGET.waitMs) {
         throw new BudgetExceeded("Run budget exceeded");
       }
       const t0 = performance.now();
-      const reply = await chat(model, messages, options);
+      const reply = await chat(model, messages, opts.signal ? { ...options, signal: opts.signal } : options);
       run.calls.push({
         node: name,
         messages: [...messages],
@@ -129,8 +132,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     run.resolvedQuestion = hit.question;
     run.finalSql = hit.sql;
     run.result = result;
-    if (resultHash(result) === hit.resultHash) {
-      run.answer = hit.answer;
+    // The stored answer text is reused only for the student who asked it, while the result
+    // is unchanged. Anyone else gets a fresh answer: model-written text never crosses users
+    // (an answer steered by one student's prompt injection must not reach another).
+    if (resultHash(result) === hit.resultHash && hit.askedBy === userId) {
+      run.answer = scrubText(hit.answer);
       run.grounded = true;
     } else {
       const ans = await node("answer", () => writeAnswer({ question: hit.question, sql: hit.sql, result, today, call: caller("answer") }), (a) => (a.grounded ? "grounded" : "ungrounded"));
@@ -172,9 +178,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
       (a) => (a.clarify ? "asked" : "clear"),
     );
     if (amb.clarify) {
+      // Model-written text shown to the user: masked like every answer
+      const clarification = { question: scrubText(amb.clarify.question), options: amb.clarify.options.map(scrubText) };
       run.status = "clarify";
-      run.clarification = amb.clarify;
-      run.answer = amb.clarify.question;
+      run.clarification = clarification;
+      run.answer = clarification.question;
       return await finish();
     }
     // Without clarifications the question stands as asked; with them, the model's
@@ -216,7 +224,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentRun> {
     run.answer = ans.answer;
     run.grounded = ans.grounded;
     run.status = "answered";
-  } catch (e) {
+  } catch (caught) {
+    // Whatever failed after the client went away, the run was cancelled
+    const e = opts.signal?.aborted && !(caught instanceof BudgetExceeded) ? new Cancelled("Cancelled: the client disconnected") : caught;
     run.status = e instanceof BudgetExceeded ? "gave_up" : "error";
     // Out of budget: mostly waiting on rate limits (busy), or just too many steps
     run.answer = e instanceof BudgetExceeded ? (waitedMs > 20_000 ? WHY.busy : WHY.tooLong) : null;

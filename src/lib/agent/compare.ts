@@ -16,7 +16,10 @@
 import type { SqlResult } from "./types.ts";
 
 type Ok = Extract<SqlResult, { ok: true }>;
-type Cell = null | string | { n: number; d: number }; // d: decimals written
+// n: the value as a double (month numbers, integer checks); d: decimals written;
+// x: the exact decimal, which is what gets rounded and compared
+type Decimal = { neg: boolean; digits: bigint; scale: number }; // (-1)^neg * digits * 10^-scale
+type Cell = null | string | { n: number; d: number; x: Decimal };
 
 const CATEGORY_LABELS: Record<string, string> = {
   textbooks: "textbooks", electronics: "electronics", furniture: "furniture", kitchen: "kitchen",
@@ -24,12 +27,35 @@ const CATEGORY_LABELS: Record<string, string> = {
   "bikes & transport": "bikes_transport", other: "other",
 };
 
+// A plain decimal string ("-12.50") as an exact decimal
+function decimal(s: string): Decimal {
+  const neg = s.startsWith("-");
+  const [int, frac = ""] = s.replace(/^-/, "").split(".");
+  return { neg, digits: BigInt(int + frac), scale: frac.length };
+}
+
+// A JS number as a plain decimal string: its shortest round-trip form, exponent expanded
+function plain(v: number): string {
+  const [mantissa, exp] = String(v).split("e");
+  if (exp === undefined) return mantissa;
+  const neg = mantissa.startsWith("-");
+  const [int, frac = ""] = mantissa.replace(/^-/, "").split(".");
+  const digits = int + frac;
+  const point = int.length + Number(exp); // position of the decimal point in digits
+  const body = point <= 0 ? `0.${"0".repeat(-point)}${digits}` : point >= digits.length ? digits + "0".repeat(point - digits.length) : `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return (neg ? "-" : "") + body;
+}
+
 function parse(value: unknown): Cell {
   if (value === null || value === undefined) return null;
-  if (typeof value === "number") return { n: value, d: Number.isInteger(value) ? 0 : Math.min(String(value).split(".")[1]?.length ?? 0, 6) };
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return String(value).toLowerCase();
+    const s = plain(value);
+    return { n: value, d: Number.isInteger(value) ? 0 : Math.min(s.split(".")[1]?.length ?? 0, 6), x: decimal(s) };
+  }
   if (typeof value === "boolean") return value ? "true" : "false";
   const s = String(value).trim();
-  if (/^-?\d+(\.\d+)?$/.test(s)) return { n: Number(s), d: s.split(".")[1]?.length ?? 0 };
+  if (/^-?\d+(\.\d+)?$/.test(s)) return { n: Number(s), d: s.split(".")[1]?.length ?? 0, x: decimal(s) };
   let text = s.toLowerCase();
   text = text.replace(/^(\d{4}-\d{2}-\d{2})[ t]00:00:00(\+00|z)?$/, "$1"); // midnight timestamp -> date
   text = text.replace(/^(\d{4}-\d{2})-01$/, "$1"); // first of month -> month
@@ -39,10 +65,28 @@ function parse(value: unknown): Cell {
 const columnsOf = (r: Ok) => r.columns.map((c) => r.rows.map((row) => parse(row[c])));
 const decimals = (col: Cell[]) => Math.max(0, ...col.map((c) => (c && typeof c === "object" ? c.d : 0)));
 
+// x * factor (factor 1, 100 or 0.01) rounded to d decimals, half away from zero as
+// Postgres' round(numeric) does, in exact decimal arithmetic: binary floating point
+// would round 1.005 down (1.00499...) and could not tell bigints above 2^53 apart
+const [ZERO, ONE, TWO, TEN] = [0, 1, 2, 10].map(BigInt); // no bigint literals: tsconfig targets ES2017
+function roundScaled(x: Decimal, factor: number, d: number) {
+  const scale = x.scale - Math.round(Math.log10(factor)); // * 100 moves the point two places right
+  let q: bigint;
+  if (scale <= d) q = x.digits * TEN ** BigInt(d - scale);
+  else {
+    const unit = TEN ** BigInt(scale - d);
+    q = x.digits / unit;
+    if (TWO * (x.digits % unit) >= unit) q += ONE;
+  }
+  const s = q.toString().padStart(d + 1, "0");
+  const body = d ? `${s.slice(0, -d)}.${s.slice(-d)}` : s;
+  return q !== ZERO && x.neg ? `-${body}` : body;
+}
+
 // A cell as a comparable string, at a given precision and scale
 function canon(c: Cell, d: number, factor: number) {
   if (c === null) return "∅";
-  if (typeof c === "object") return (Math.round(c.n * factor * 10 ** d) / 10 ** d).toFixed(d);
+  if (typeof c === "object") return roundScaled(c.x, factor, d);
   return `s:${c}`;
 }
 

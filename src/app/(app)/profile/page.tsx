@@ -146,13 +146,13 @@ export default function ProfilePage() {
               {reviews.map((r) => (
                 <li key={r.review_id}>
                   <Card className="h-full p-4">
-                    <p className="text-small">
+                    <p className="text-small wrap-anywhere">
                       <span className="font-semibold">{store.profile(r.reviewer_id)?.name}</span>{" "}
                       <span className="text-muted">
                         gave {r.rating} of 5, {timeAgo(r.created_at)}
                       </span>
                     </p>
-                    {r.comment && <p className="mt-1 text-small text-muted">{r.comment}</p>}
+                    {r.comment && <p className="mt-1 text-small text-muted wrap-anywhere">{r.comment}</p>}
                   </Card>
                 </li>
               ))}

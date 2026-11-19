@@ -6,8 +6,11 @@ if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBL
 
 // Browser client: the session lives in localStorage and every query runs as the
 // signed-in student, so row-level security decides what they can see and do.
+// Google sign-in uses the PKCE flow: Google sends the browser back to /login with
+// a one-time ?code, which the login page exchanges for a session (so the URL is
+// never read automatically on other pages).
 export const supabase = createClient(url, key, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: "pkce" },
 });
 
 export const PHOTO_BUCKET = "item-images";

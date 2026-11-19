@@ -48,7 +48,7 @@ export function ItemCard({ item, showStatus = false }: { item: Item; showStatus?
             )}
           </span>
         </div>
-        <h3 className="mt-3 line-clamp-1 font-sans text-body font-medium transition-colors group-hover:text-accent-ink">{item.title}</h3>
+        <h3 className="mt-3 line-clamp-1 font-sans wrap-anywhere text-body font-medium transition-colors group-hover:text-accent-ink">{item.title}</h3>
         <Price item={item} className="mt-0.5 line-clamp-1" />
         <p className="mt-1 flex items-center gap-1 text-micro text-muted">
           <MapPin className="size-3.5 shrink-0" aria-hidden />

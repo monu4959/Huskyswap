@@ -82,11 +82,15 @@ export async function retrieve(
   const started = performance.now();
   const vector = given ?? (await embed([question]))[0];
   const terms = tokens(question);
+  // The index is a snapshot: a title indexed from nlq.listings (what students may see) is
+  // only used while that listing is still up, so a sold or removed listing's title never
+  // reaches a student's prompt after the fact
+  const live = `(view_name is distinct from 'listings' or meta->>'title' is null or exists (select 1 from nlq.listings l where l.title = value))`;
   const near = (kind: string, limit: number) => `
     (select 'vector' as src, kind, view_name, column_name, value, meta,
             1 - (embedding operator(extensions.<=>) $1::extensions.vector) as score
      from ops.rag_docs
-     where kind ${kind} and $2 = any(roles)
+     where kind ${kind} and $2 = any(roles)${kind === "= 'value'" ? ` and ${live}` : ""}
      order by embedding operator(extensions.<=>) $1::extensions.vector
      limit ${limit})`;
   const { rows } = await opsPool().query<Row>(
@@ -97,7 +101,7 @@ export async function retrieve(
      union all
      (select 'text', kind, view_name, column_name, value, meta, extensions.word_similarity(t, lower(value)) as score
       from ops.rag_docs, unnest(case when meta ? 'title' then $4::text[] else $3::text[] end) as t
-      where kind = 'value' and $2 = any(roles) and extensions.word_similarity(t, lower(value)) >= ${THRESHOLDS.text}
+      where kind = 'value' and $2 = any(roles) and extensions.word_similarity(t, lower(value)) >= ${THRESHOLDS.text} and ${live}
       order by score desc
       limit 20)`,
     [toVector(vector), role, terms.all, terms.items],

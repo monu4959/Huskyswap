@@ -13,7 +13,11 @@ let extractor: Promise<FeatureExtractionPipeline> | null = null;
 
 export async function embed(texts: string[]): Promise<number[][]> {
   if (!texts.length) return [];
-  extractor ??= pipeline("feature-extraction", EMBED_MODEL, { dtype: "q8" });
+  // A failed load (e.g. the download broke) is forgotten, so the next call tries again
+  extractor ??= pipeline("feature-extraction", EMBED_MODEL, { dtype: "q8" }).catch((e) => {
+    extractor = null;
+    throw e;
+  });
   const output = await (await extractor)(texts, { pooling: "mean", normalize: true });
   return output.tolist() as number[][];
 }

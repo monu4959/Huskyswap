@@ -17,6 +17,21 @@ import {
   type ReactNode,
 } from "react";
 import type { RealtimeChannel, Session } from "@supabase/supabase-js";
+import {
+  applyTransactionEvent,
+  mergeResyncDeals,
+  conversationToFetch,
+  mergeMessage,
+  mergeProfiles,
+  missingProfileIds,
+  one,
+  resyncItemIds,
+  toTransaction,
+  unionChats,
+  upsertSorted,
+  type TransactionEvent,
+  type TransactionRow,
+} from "./realtime-merge";
 import { PHOTO_BUCKET, photoUrl, supabase } from "./supabase";
 import type {
   Conversation,
@@ -53,6 +68,11 @@ interface Rating {
 const EMPTY_DB: Db = { profiles: [], items: [], saved: [], conversations: [], messages: [], transactions: [], reviews: [], ratings: [] };
 
 export class ActionError extends Error {}
+
+// Coalesce bursts of "maybe we missed events" signals into one reload
+const RESYNC_DEBOUNCE_MS = 500;
+// A tab hidden longer than this reloads chats and deals when shown again
+const RESYNC_AFTER_HIDDEN_MS = 60_000;
 
 export interface NewListing {
   title: string;
@@ -98,9 +118,6 @@ interface ItemRow {
   item_images: { storage_path: string; position: number }[];
 }
 
-// Embedded one-to-one rows may come back as an object or a one-element array
-const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
-
 const toItem = (r: ItemRow): Item => {
   const sale = one(r.buyable_items);
   const rent = one(r.borrowable_items);
@@ -121,25 +138,6 @@ const toItem = (r: ItemRow): Item => {
   };
 };
 
-interface TransactionRow extends Omit<Transaction, "rental" | "agreed_price"> {
-  agreed_price: number | string;
-  rentals: Transaction["rental"] | NonNullable<Transaction["rental"]>[] | null;
-}
-const toTransaction = (r: TransactionRow): Transaction => {
-  const rental = one(r.rentals);
-  return {
-  transaction_id: r.transaction_id,
-  item_id: r.item_id,
-  buyer_id: r.buyer_id,
-  type: r.type,
-  agreed_price: Number(r.agreed_price),
-  status: r.status,
-  created_at: r.created_at,
-  completed_at: r.completed_at,
-  rental: rental ? { ...rental, deposit_agreed: Number(rental.deposit_agreed) } : null,
-  };
-};
-
 const loadItems = (ids?: number[]) =>
   fetchAll<ItemRow>((from, to) => {
     let q = supabase.from("items").select(ITEM_COLUMNS).order("item_id").range(from, to);
@@ -147,14 +145,20 @@ const loadItems = (ids?: number[]) =>
     return q;
   }).then((rows) => rows.map(toItem));
 
+const DEAL_COLUMNS =
+  "transaction_id, item_id, buyer_id, type, agreed_price, status, created_at, completed_at, rentals(start_date, due_date, deposit_agreed, returned_at, return_condition)";
+
 const loadDeals = () =>
   fetchAll<TransactionRow>((from, to) =>
-    supabase
-      .from("transactions")
-      .select("transaction_id, item_id, buyer_id, type, agreed_price, status, created_at, completed_at, rentals(start_date, due_date, deposit_agreed, returned_at, return_condition)")
-      .order("transaction_id")
-      .range(from, to),
+    supabase.from("transactions").select(DEAL_COLUMNS).order("transaction_id").range(from, to),
   ).then((rows) => rows.map(toTransaction));
+
+// One deal with its rentals embed (Realtime payloads carry no embeds); null if not visible
+async function loadDeal(id: number) {
+  const { data, error } = await supabase.from("transactions").select(DEAL_COLUMNS).eq("transaction_id", id).maybeSingle();
+  if (error) throw new ActionError(error.message);
+  return data ? toTransaction(data as TransactionRow) : null;
+}
 
 const loadChats = async () => {
   const [conversations, messages] = await Promise.all([
@@ -163,6 +167,16 @@ const loadChats = async () => {
   ]);
   return { conversations, messages };
 };
+
+// One conversation (a chat someone else just started); null if not visible
+async function loadConversation(id: number) {
+  const { data, error } = await supabase.from("conversations").select("*").eq("conversation_id", id).maybeSingle();
+  if (error) throw new ActionError(error.message);
+  return (data as Conversation | null) ?? null;
+}
+
+const loadConversationMessages = (id: number) =>
+  fetchAll<Message>((from, to) => supabase.from("messages").select("*").eq("conversation_id", id).order("message_id").range(from, to));
 
 const loadMyReviews = (uid: string) =>
   fetchAll<Review>((from, to) =>
@@ -195,10 +209,21 @@ async function loadRelevantItems(uid: string, relatedIds: number[]) {
 const loadSaved = (uid: string) =>
   fetchAll<SavedItem>((from, to) => supabase.from("saved_items").select("*").eq("user_id", uid).range(from, to));
 
+const PROFILE_COLUMNS = "id, name, role, account_status, created_at";
+
 const loadProfiles = () =>
-  fetchAll<Omit<Profile, "email">>((from, to) =>
-    supabase.from("profiles").select("id, name, role, account_status, created_at").order("id").range(from, to),
-  );
+  fetchAll<Omit<Profile, "email">>((from, to) => supabase.from("profiles").select(PROFILE_COLUMNS).order("id").range(from, to));
+
+// Just these students (someone who signed up after this student's app loaded)
+async function loadProfilesById(ids: string[]) {
+  const rows: Omit<Profile, "email">[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await supabase.from("profiles").select(PROFILE_COLUMNS).in("id", ids.slice(i, i + 100));
+    if (error) throw new ActionError(error.message);
+    rows.push(...((data ?? []) as Omit<Profile, "email">[]));
+  }
+  return rows;
+}
 
 // Turn a Supabase error into a message the toast can show
 async function rpc<T = unknown>(fn: string, args: Record<string, unknown>): Promise<T> {
@@ -239,6 +264,42 @@ function useStoreValue() {
 
   const patch = useCallback((fn: (d: Db) => Db) => setDb((d) => fn(d)), []);
 
+  // Latest committed data, for event handlers deciding what (if anything) to fetch
+  const dbRef = useRef(db);
+  useEffect(() => {
+    dbRef.current = db;
+  }, [db]);
+  // The student whose data is loaded, and whose Realtime channel is joined
+  const loadedRef = useRef<string | null>(null);
+  const subscribedRef = useRef<string | null>(null);
+  // Fetches already started this sign-in, so a burst of events asks once
+  const askedProfiles = useRef(new Set<string>());
+  const askedConversations = useRef(new Set<number>());
+  // Latest event per deal: a slower, older single-deal fetch must not win
+  const dealSeq = useRef(new Map<number, number>());
+  useEffect(() => {
+    askedProfiles.current = new Set();
+    askedConversations.current = new Set();
+    dealSeq.current = new Map();
+  }, [me]);
+
+  // Profiles are loaded once per sign-in; fetch students who appeared since
+  const ensureProfiles = useCallback(
+    async (ids: (string | null | undefined)[]) => {
+      const missing = missingProfileIds(dbRef.current.profiles, ids).filter((id) => !askedProfiles.current.has(id));
+      if (!missing.length) return;
+      for (const id of missing) askedProfiles.current.add(id);
+      try {
+        const fresh = await loadProfilesById(missing);
+        if (fresh.length) patch((d) => ({ ...d, profiles: mergeProfiles(d.profiles, fresh) }));
+      } catch (e) {
+        for (const id of missing) askedProfiles.current.delete(id);
+        throw e;
+      }
+    },
+    [patch],
+  );
+
   const refreshItems = useCallback(
     async (ids: number[]) => {
       if (!ids.length) return;
@@ -248,23 +309,113 @@ function useStoreValue() {
         ...d,
         items: [...d.items.filter((i) => !byId.has(i.item_id)), ...fresh].sort((a, b) => a.item_id - b.item_id),
       }));
+      ensureProfiles(fresh.map((i) => i.owner_id)).catch(() => {});
     },
-    [patch],
+    [patch, ensureProfiles],
   );
   const refreshDeals = useCallback(async () => {
     const transactions = await loadDeals();
     patch((d) => ({ ...d, transactions }));
-  }, [patch]);
-  const refreshChats = useCallback(async () => {
-    const chats = await loadChats();
-    patch((d) => ({ ...d, ...chats }));
-  }, [patch]);
+    ensureProfiles(transactions.map((t) => t.buyer_id)).catch(() => {});
+  }, [patch, ensureProfiles]);
   const refreshReviews = useCallback(async () => {
     const uid = meRef.current;
     if (!uid) return;
     const [reviews, ratings] = await Promise.all([loadMyReviews(uid), loadRatings()]);
     patch((d) => ({ ...d, reviews, ratings }));
   }, [patch]);
+
+  // Add one conversation (and, when asked, its messages), its listing and its buyer's profile
+  const addConversation = useCallback(
+    async (conversationId: number, withMessages = false) => {
+      const [conversation, messages] = await Promise.all([
+        loadConversation(conversationId),
+        withMessages ? loadConversationMessages(conversationId) : Promise.resolve([] as Message[]),
+      ]);
+      if (!conversation) return;
+      patch((d) => ({
+        ...d,
+        conversations: upsertSorted(d.conversations, conversation, (c) => c.conversation_id),
+        messages: messages.reduce(mergeMessage, d.messages),
+      }));
+      const tasks = [ensureProfiles([conversation.buyer_id, ...messages.map((m) => m.sender_id)])];
+      if (!dbRef.current.items.some((i) => i.item_id === conversation.item_id)) tasks.push(refreshItems([conversation.item_id]));
+      await Promise.all(tasks);
+    },
+    [patch, ensureProfiles, refreshItems],
+  );
+
+  // Fetch one deal (for its rentals embed), unless a newer event for it arrived meanwhile
+  const refreshDeal = useCallback(
+    async (txId: number, seq: number) => {
+      const fresh = await loadDeal(txId);
+      if (!fresh || dealSeq.current.get(txId) !== seq) return;
+      patch((d) => ({ ...d, transactions: upsertSorted(d.transactions, fresh, (t) => t.transaction_id) }));
+    },
+    [patch],
+  );
+
+  // Safety net, not the normal path: reload chats and deals after Realtime may
+  // have missed events (a dropped channel, a long-hidden tab, the gap between the
+  // first load and the channel joining). Bursts are coalesced into one reload.
+  const resync = useCallback(async () => {
+    // Older single-deal fetches still in flight must not overwrite the reload;
+    // deals with an event during the reload keep their (newer) local row.
+    for (const [id, n] of dealSeq.current) dealSeq.current.set(id, n + 1);
+    const seqAtStart = new Map(dealSeq.current);
+    const [chats, transactions] = await Promise.all([loadChats(), loadDeals()]);
+    const changed = new Set([...dealSeq.current].filter(([id, n]) => seqAtStart.get(id) !== n).map(([id]) => id));
+    const itemIds = resyncItemIds(dbRef.current, { transactions, conversations: chats.conversations });
+    patch((d) => ({
+      ...d,
+      ...unionChats(chats, d),
+      transactions: mergeResyncDeals(transactions, d.transactions, changed),
+    }));
+    const tasks = [
+      ensureProfiles([
+        ...chats.messages.map((m) => m.sender_id),
+        ...chats.conversations.map((c) => c.buyer_id),
+        ...transactions.map((t) => t.buyer_id),
+      ]),
+    ];
+    for (let i = 0; i < itemIds.length; i += 200) tasks.push(refreshItems(itemIds.slice(i, i + 200)));
+    await Promise.all(tasks);
+  }, [patch, ensureProfiles, refreshItems]);
+
+  const resyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resyncRunning = useRef(false);
+  const resyncAgain = useRef(false);
+  const scheduleResync = useCallback(() => {
+    if (resyncTimer.current) return;
+    const run = async () => {
+      resyncTimer.current = null;
+      if (resyncRunning.current) {
+        resyncAgain.current = true;
+        return;
+      }
+      resyncRunning.current = true;
+      try {
+        if (meRef.current && loadedRef.current === meRef.current) await resync();
+      } catch {
+        // the next reconnect or tab focus tries again
+      } finally {
+        resyncRunning.current = false;
+        if (resyncAgain.current && !resyncTimer.current) {
+          resyncAgain.current = false;
+          resyncTimer.current = setTimeout(run, RESYNC_DEBOUNCE_MS);
+        }
+      }
+    };
+    resyncTimer.current = setTimeout(run, RESYNC_DEBOUNCE_MS);
+  }, [resync]);
+  useEffect(
+    () => () => {
+      if (resyncTimer.current) clearTimeout(resyncTimer.current);
+      resyncTimer.current = null;
+      resyncAgain.current = false;
+    },
+    [me],
+  );
 
   // Everything this student can see, loaded once per sign-in
   useEffect(() => {
@@ -311,27 +462,101 @@ function useStoreValue() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the signed-in student changes
   }, [me]);
 
-  // Realtime: new messages and deal changes involving this student (RLS-filtered)
+  // Runs after the commit that put the first load in dbRef (effects run in order).
+  // Events between the load's snapshot and the channel joining were never
+  // delivered, so once both have happened, catch up once.
+  useEffect(() => {
+    loadedRef.current = loadedFor;
+    if (loadedFor && subscribedRef.current === loadedFor) scheduleResync();
+  }, [loadedFor, scheduleResync]);
+
+  // Realtime: new messages, read receipts and deal changes involving this student
+  // (RLS-filtered). Each event is merged from its payload row; only what the store
+  // can't build from the payload (a new chat's conversation, a rental's terms, a
+  // listing's new status, an unknown student's profile) is fetched, row by row.
   useEffect(() => {
     if (!me) return;
+    let active = true;
+    let joined = false;
+    let broken = false;
+    // before the first load lands, events are dropped: the catch-up above covers them
+    const live = () => active && loadedRef.current === me;
+
+    const onMessage = ({ new: row }: { new: Partial<Message> | Record<string, never> }) => {
+      if (!live()) return;
+      const msg = row as Partial<Message>;
+      patch((d) => {
+        const messages = mergeMessage(d.messages, msg);
+        return messages === d.messages ? d : { ...d, messages };
+      });
+      ensureProfiles([msg.sender_id]).catch(() => {});
+      // a chat started by someone else: fetch just its conversation row
+      const conversationId = conversationToFetch(dbRef.current.conversations, msg);
+      if (conversationId != null && !askedConversations.current.has(conversationId)) {
+        askedConversations.current.add(conversationId);
+        addConversation(conversationId).catch(() => askedConversations.current.delete(conversationId));
+      }
+    };
+
+    const onDeal = (event: TransactionEvent) => {
+      if (!live()) return;
+      const txId =
+        (event.new as Partial<TransactionRow> | null)?.transaction_id ?? (event.old as Partial<TransactionRow> | null)?.transaction_id;
+      if (txId == null) return;
+      const seq = (dealSeq.current.get(txId) ?? 0) + 1;
+      dealSeq.current.set(txId, seq);
+      const { fetchId, itemId, buyerId } = applyTransactionEvent(dbRef.current.transactions, event);
+      patch((d) => {
+        const { transactions } = applyTransactionEvent(d.transactions, event);
+        return transactions === d.transactions ? d : { ...d, transactions };
+      });
+      if (fetchId != null) refreshDeal(fetchId, seq).catch(() => {});
+      if (itemId) refreshItems([itemId]).catch(() => {});
+      ensureProfiles([buyerId]).catch(() => {});
+    };
+
     const channel: RealtimeChannel = supabase
       .channel(`student-${me}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, ({ new: m }) => {
-        const msg = m as Message;
-        patch((d) => (d.messages.some((x) => x.message_id === msg.message_id) ? d : { ...d, messages: [...d.messages, msg] }));
-        // a chat started by someone else: fetch its conversation row
-        refreshChats().catch(() => {});
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, ({ new: t }) => {
-        refreshDeals().catch(() => {});
-        const itemId = (t as Partial<Transaction>)?.item_id;
-        if (itemId) refreshItems([itemId]).catch(() => {});
-      })
-      .subscribe();
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, onMessage)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, onMessage)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, (payload) =>
+        onDeal({ eventType: payload.eventType, new: payload.new, old: payload.old } as TransactionEvent),
+      )
+      .subscribe((status) => {
+        if (!active) return;
+        if (status !== "SUBSCRIBED") {
+          broken = true; // CHANNEL_ERROR, TIMED_OUT or CLOSED: the client rejoins by itself
+          return;
+        }
+        if (!joined) {
+          joined = true;
+          subscribedRef.current = me;
+          if (loadedRef.current === me) scheduleResync();
+        } else if (broken) {
+          scheduleResync();
+        }
+        broken = false;
+      });
+
+    // A tab hidden for a while may have been throttled or disconnected
+    let hiddenAt: number | null = document.visibilityState === "hidden" ? Date.now() : null;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (hiddenAt !== null && Date.now() - hiddenAt > RESYNC_AFTER_HIDDEN_MS) scheduleResync();
+      hiddenAt = null;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
+      active = false;
+      if (subscribedRef.current === me) subscribedRef.current = null;
+      document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(channel);
     };
-  }, [me, patch, refreshChats, refreshDeals, refreshItems]);
+  }, [me, patch, ensureProfiles, addConversation, refreshDeal, refreshItems, scheduleResync]);
 
   // ---------- auth ----------
   const sendCode = useCallback(async (email: string) => {
@@ -363,6 +588,26 @@ function useStoreValue() {
     const { data, error } = await supabase.auth.setSession({ access_token: body.access_token, refresh_token: body.refresh_token });
     if (error || !data.user) throw new ActionError(error?.message ?? "Sign-in failed.");
     return { isNew: await isNewAccount(data.user.id, email) };
+  }, []);
+
+  // Google sign-in: leaves the app for Google, which sends the browser back to
+  // /login?code=… (finishGoogleSignIn completes it there)
+  const googleSignIn = useCallback(async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/login`, queryParams: { prompt: "select_account" } },
+    });
+    if (error) throw new ActionError(error.message);
+  }, []);
+
+  // Back from Google: trade the one-time code for a session. A brand-new account
+  // (created moments ago) gets the name step, prefilled with its Google name.
+  const finishGoogleSignIn = useCallback(async (code: string) => {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error || !data.user) throw new ActionError(error?.message ?? "Sign-in failed.");
+    const { data: profile } = await supabase.from("profiles").select("name").eq("id", data.user.id).single();
+    const isNew = Date.now() - new Date(data.user.created_at).getTime() < 10 * 60_000;
+    return { isNew, name: profile?.name ?? "" };
   }, []);
 
   const signOut = useCallback(async () => {
@@ -446,10 +691,11 @@ function useStoreValue() {
   const openConversation = useCallback(
     async (itemId: number, buyerId?: string) => {
       const id = await rpc<number>("open_conversation", { p_item_id: itemId, p_buyer_id: buyerId ?? null });
-      if (!db.conversations.some((c) => c.conversation_id === id)) await refreshChats();
+      // a chat this student didn't have yet: fetch just that one (and any messages already in it)
+      if (!db.conversations.some((c) => c.conversation_id === id)) await addConversation(id, true);
       return id;
     },
-    [db.conversations, refreshChats],
+    [db.conversations, addConversation],
   );
 
   const sendMessage = useCallback(
@@ -463,7 +709,10 @@ function useStoreValue() {
         .select()
         .single();
       if (error) throw new ActionError(error.message);
-      patch((d) => (d.messages.some((m) => m.message_id === data.message_id) ? d : { ...d, messages: [...d.messages, data as Message] }));
+      patch((d) => {
+        const messages = mergeMessage(d.messages, data as Message);
+        return messages === d.messages ? d : { ...d, messages };
+      });
     },
     [patch],
   );
@@ -578,6 +827,8 @@ function useStoreValue() {
     sendCode,
     verifyCode,
     demoSignIn,
+    googleSignIn,
+    finishGoogleSignIn,
     signOut,
     updateName,
     createListing,

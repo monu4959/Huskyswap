@@ -6,7 +6,9 @@
 import { readFileSync } from "node:fs";
 import pg from "pg";
 
-const url = readFileSync(new URL("../.env.local", import.meta.url), "utf8").match(/^DATABASE_URL=(.*)$/m)[1].trim();
+// A DATABASE_URL already in the environment wins (scripts/test-env.mjs points it at the local stack).
+const url =
+  process.env.DATABASE_URL ?? readFileSync(new URL("../.env.local", import.meta.url), "utf8").match(/^DATABASE_URL=(.*)$/m)[1].trim();
 const db = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
 await db.connect();
 
@@ -90,7 +92,7 @@ try {
 
   // A third student can't see this private deal or chat
   const { rows: [third] } = await db.query("reset role; select 1").then(() =>
-    db.query("select id from public.profiles where account_status = 'active' and id not in ($1, $2) order by created_at desc limit 1", [buyer, owner]));
+    db.query("select id from public.profiles where account_status = 'active' and role = 'student' and id not in ($1, $2) order by created_at desc limit 1", [buyer, owner]));
   await as(third.id);
   const { rows: [spy] } = await db.query(
     "select (select count(*) from public.transactions where transaction_id = $1)::int as deal, (select count(*) from public.messages where conversation_id = $2)::int as msgs", [tx, conv]);

@@ -54,3 +54,11 @@ public/items/*-c[0-9]*.webp
 
 # Python bytecode
 __pycache__/
+
+# Local test build (scripts/test-env.mjs sets NEXT_DIST_DIR=.next-test)
+/.next-test/
+
+# Playwright e2e output (npm run test:e2e)
+/test-results/
+/playwright-report/
+/playwright/.cache/

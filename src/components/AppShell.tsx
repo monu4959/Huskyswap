@@ -42,7 +42,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
 // While the marketplace loads: the shape of the home page, shimmering
 function AppSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading listings">
+    <div>
+      <p role="status" className="sr-only">
+        Loading listings
+      </p>
       <div className="hidden h-16 items-center md:flex">
         <div className={`${pageClass} flex items-center justify-between`}>
           <Logo className="text-[22px]" />
