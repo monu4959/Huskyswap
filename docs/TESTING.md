@@ -3,7 +3,7 @@
 ## Local test environment
 
 Tests run against a **local Supabase stack in Docker**, never against the production
-project. Real testers use production, so the rule is simple:
+project. The 50+ students testing HuskySwap use production, so the rule is simple:
 
 > **Tests never use `.env.local`.** Every test command goes through `scripts/test-env.mjs`
 > (`npm run test:env -- <command>`), which loads `.env.test` and points everything at

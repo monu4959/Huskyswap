@@ -1,6 +1,6 @@
 # Checks on every push and pull request.
 #
-#   checks      lint, types, comparator unit tests, and the model registry: every
+#   checks      lint, types, unit tests (Vitest), comparator tests, and the model registry: every
 #               report it cites exists and matches, and every promotion or canary
 #               has a passing eval gate (npm run gate) committed with it
 #   db-checks   agent guard tests and eval-set verification against the database.
@@ -33,6 +33,7 @@ jobs:
       - run: npm run lint
       - run: npx next typegen # PageProps / LayoutProps: generated, not in git
       - run: npx tsc --noEmit
+      - run: npm run test:unit
       - run: npm run test:compare
       - run: npm run registry -- check
 

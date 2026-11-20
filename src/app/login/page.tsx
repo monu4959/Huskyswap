@@ -13,7 +13,7 @@ type Step = "email" | "code" | "name";
 const RESEND_AFTER = 60; // seconds
 // Email codes aren't set up yet: in demo mode no email is sent and any 6-digit code works (/api/demo-login)
 const DEMO_LOGIN = process.env.NEXT_PUBLIC_DEMO_LOGIN === "true";
-// Google sign-in shows once it's set up in Supabase (README: Sign-in)
+// Google sign-in shows once it's set up in Supabase (docs/SETUP.md: Sign-in)
 const GOOGLE_LOGIN = process.env.NEXT_PUBLIC_GOOGLE_LOGIN === "true";
 // The Northeastern email form shows in demo mode, once real email codes are set up,
 // or whenever there's no Google button (so there's always a way in)

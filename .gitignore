@@ -58,7 +58,15 @@ __pycache__/
 # Local test build (scripts/test-env.mjs sets NEXT_DIST_DIR=.next-test)
 /.next-test/
 
+/.next-demo/
+
 # Playwright e2e output (npm run test:e2e)
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# Local AI-assistant tooling (kept on this machine, not in the repo)
+/AGENTS.md
+/CLAUDE.md
+/.mcp.json
+/.claude/

@@ -1,5 +1,6 @@
 {
   "name": "husky",
+  "description": "HuskySwap: a Northeastern student marketplace with a text-to-SQL assistant, in active testing with 50+ students.",
   "version": "0.1.0",
   "private": true,
   "scripts": {
