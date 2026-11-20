@@ -1,5 +1,11 @@
 # HuskySwap
 
+
+
+https://github.com/user-attachments/assets/14ecfc57-e97d-4536-988a-8990b7918412
+
+
+
 > ### 👉 Try it live: [huskyswap.vercel.app](https://huskyswap.vercel.app)
 >
 > Sign in with your `@northeastern.edu` email; new users choose a display name, then the marketplace opens.
